@@ -7,21 +7,21 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:4000"
+        "EXPO_PUBLIC_API_URL": "https://fl-liga-backend.onrender.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://TU_BACKEND_PUBLICO"
+        "EXPO_PUBLIC_API_URL": "https://fl-liga-backend.onrender.com"
       }
     },
     "production": {
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://TU_BACKEND_PUBLICO"
+        "EXPO_PUBLIC_API_URL": "https://fl-liga-backend.onrender.com"
       }
     }
   },

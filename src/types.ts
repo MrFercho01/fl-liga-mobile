@@ -11,6 +11,15 @@ export interface PublicLeagueSummary {
   categories: Array<{ id: string; name: string }>
 }
 
+export interface PublicClientSummary {
+  id: string
+  name: string
+  organizationName?: string
+  publicRouteAlias: string
+  publicPortalPath: string
+  leagues: PublicLeagueSummary[]
+}
+
 export interface PublicTeam {
   id: string
   name: string

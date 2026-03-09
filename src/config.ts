@@ -1,6 +1,12 @@
 import { Platform } from 'react-native'
 
+const renderApiUrl = 'https://fl-liga-backend.onrender.com'
+
 const runtimeApiUrl = () => {
+  if (!__DEV__) {
+    return renderApiUrl
+  }
+
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:4000'
   }

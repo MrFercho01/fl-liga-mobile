@@ -33,6 +33,12 @@
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "df6f79f6-3c70-42c8-a0e3-3fa62922a532"
+      }
+    },
+    "owner": "mrfercho"
   }
 }

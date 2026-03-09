@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config'
-import type { LiveMatch, PublicFixturePayload, PublicLeagueSummary } from '../types'
+import type { LiveMatch, PublicClientSummary, PublicFixturePayload, PublicLeagueSummary } from '../types'
 
 const getJson = async <T>(url: string): Promise<T> => {
   const response = await fetch(url)
@@ -12,6 +12,11 @@ const getJson = async <T>(url: string): Promise<T> => {
 }
 
 export const mobileApi = {
+  async getPublicClients(): Promise<PublicClientSummary[]> {
+    const payload = await getJson<{ data: PublicClientSummary[] }>(`${API_BASE_URL}/api/public/clients`)
+    return payload.data
+  },
+
   async getPublicClientLeagues(clientId: string): Promise<PublicLeagueSummary[]> {
     const payload = await getJson<{ data: PublicLeagueSummary[] }>(
       `${API_BASE_URL}/api/public/client/${encodeURIComponent(clientId)}/leagues`,

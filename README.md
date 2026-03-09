@@ -26,7 +26,7 @@ npm install
 2. Configurar URL del backend (obligatorio para preview/production):
 
 ```bash
-EXPO_PUBLIC_API_URL=https://TU_BACKEND_PUBLICO
+EXPO_PUBLIC_API_URL=https://fl-liga-backend.onrender.com
 ```
 
 > Si no defines variable, usa fallback:

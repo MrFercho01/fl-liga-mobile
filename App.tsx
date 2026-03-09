@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,9 +15,10 @@ import {
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useLiveSocket } from './src/hooks/useLiveSocket'
 import { mobileApi } from './src/services/api'
-import type { LiveEvent, LiveMatch, ScheduledMatch } from './src/types'
+import type { LiveEvent, LiveMatch, PublicClientSummary, ScheduledMatch } from './src/types'
 
 const queryClient = new QueryClient()
+const defaultFLLogo = require('./assets/icon.png')
 
 const formatMatchId = (round: number, index: number, homeTeamId: string, awayTeamId: string) =>
   `${round}-${index}-${homeTeamId}-${awayTeamId}`
@@ -35,9 +37,15 @@ const eventLabel: Record<LiveEvent['type'], string> = {
   staff_red: 'TR cuerpo técnico',
 }
 
+const withAlpha = (hex: string | undefined, alphaHex: string) => {
+  if (!hex) return '#0f172a'
+  const value = hex.trim()
+  if (!/^#([0-9a-fA-F]{6})$/.test(value)) return '#0f172a'
+  return `${value}${alphaHex}`
+}
+
 const MobileLiveApp = () => {
-  const [clientIdInput, setClientIdInput] = useState('cliente-1')
-  const [activeClientId, setActiveClientId] = useState('cliente-1')
+  const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedLeagueId, setSelectedLeagueId] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [selectedRound, setSelectedRound] = useState(1)
@@ -45,24 +53,32 @@ const MobileLiveApp = () => {
   const [activeTab, setActiveTab] = useState<'live' | 'highlights'>('live')
   const [liveMatch, setLiveMatch] = useState<LiveMatch | null>(null)
 
-  const leaguesQuery = useQuery({
-    queryKey: ['public-leagues', activeClientId],
-    queryFn: () => mobileApi.getPublicClientLeagues(activeClientId),
+  const clientsQuery = useQuery({
+    queryKey: ['public-clients'],
+    queryFn: mobileApi.getPublicClients,
     staleTime: 60_000,
   })
 
+  const selectedClient = useMemo<PublicClientSummary | null>(
+    () => clientsQuery.data?.find((client) => client.id === selectedClientId) ?? null,
+    [clientsQuery.data, selectedClientId],
+  )
+
+  const leagues = selectedClient?.leagues ?? []
+
   const selectedLeague = useMemo(
-    () => leaguesQuery.data?.find((league) => league.id === selectedLeagueId) ?? null,
-    [leaguesQuery.data, selectedLeagueId],
+    () => leagues.find((league) => league.id === selectedLeagueId) ?? null,
+    [leagues, selectedLeagueId],
   )
 
   const categories = selectedLeague?.categories ?? []
   const activeCategory = categories.find((category) => category.id === selectedCategoryId) ?? categories[0] ?? null
 
   const fixtureQuery = useQuery({
-    queryKey: ['public-fixture', activeClientId, selectedLeagueId, activeCategory?.id],
-    queryFn: () => mobileApi.getPublicClientLeagueFixture(activeClientId, selectedLeagueId, activeCategory?.id ?? ''),
-    enabled: Boolean(activeClientId && selectedLeagueId && activeCategory?.id),
+    queryKey: ['public-fixture', selectedClient?.publicRouteAlias, selectedLeagueId, activeCategory?.id],
+    queryFn: () =>
+      mobileApi.getPublicClientLeagueFixture(selectedClient?.publicRouteAlias ?? selectedClient?.id ?? '', selectedLeagueId, activeCategory?.id ?? ''),
+    enabled: Boolean(selectedClient && selectedLeagueId && activeCategory?.id),
     staleTime: 30_000,
   })
 
@@ -89,13 +105,27 @@ const MobileLiveApp = () => {
   }, [fetchLive])
 
   useEffect(() => {
-    if (!leaguesQuery.data || leaguesQuery.data.length === 0) return
-    const firstLeague = leaguesQuery.data[0]
-    if (!firstLeague) return
+    const firstClient = clientsQuery.data?.[0]
+    if (!firstClient) return
 
-    setSelectedLeagueId((current) => current || firstLeague.id)
-    setSelectedCategoryId((current) => current || firstLeague.categories[0]?.id || '')
-  }, [leaguesQuery.data])
+    setSelectedClientId((current) => current || firstClient.id)
+  }, [clientsQuery.data])
+
+  useEffect(() => {
+    const firstLeague = leagues[0]
+    if (!firstLeague) {
+      setSelectedLeagueId('')
+      setSelectedCategoryId('')
+      return
+    }
+
+    setSelectedLeagueId((current) => (current && leagues.some((league) => league.id === current) ? current : firstLeague.id))
+    setSelectedCategoryId((current) => {
+      const hasCurrent = selectedLeague?.categories.some((category) => category.id === current)
+      if (hasCurrent) return current
+      return firstLeague.categories[0]?.id ?? ''
+    })
+  }, [leagues, selectedLeague?.categories])
 
   useEffect(() => {
     if (!fixtureQuery.data) return
@@ -242,34 +272,61 @@ const MobileLiveApp = () => {
 
   const highlightVideos = playedRecord?.highlightVideos ?? []
 
+  const leagueThemeColor = fixtureQuery.data?.league.themeColor ?? selectedLeague?.themeColor ?? '#0ea5e9'
+  const leagueLogoUrl = fixtureQuery.data?.league.logoUrl ?? selectedLeague?.logoUrl
+  const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : defaultFLLogo
+  const year = new Date().getFullYear()
+  const leagueName = fixtureQuery.data?.league.name ?? selectedLeague?.name ?? 'FL Liga Mobile'
+  const leagueSubtitle = selectedClient?.organizationName
+    ? `${selectedClient.organizationName} · ${activeCategory?.name ?? 'Categorías'}`
+    : `${selectedClient?.name ?? 'Multicliente'} · ${activeCategory?.name ?? 'Categorías'}`
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
       <View style={styles.container}>
-        <Text style={styles.title}>FL Liga Mobile Live</Text>
-        <Text style={styles.subtitle}>iOS + Android · Realtime con el mismo backend web</Text>
-
-        <View style={styles.clientRow}>
-          <TextInput
-            value={clientIdInput}
-            onChangeText={setClientIdInput}
-            placeholder="cliente-1"
-            placeholderTextColor="#64748b"
-            style={styles.input}
-            autoCapitalize="none"
-          />
-          <Pressable style={styles.button} onPress={() => setActiveClientId(clientIdInput.trim() || 'cliente-1')}>
-            <Text style={styles.buttonText}>Cargar</Text>
-          </Pressable>
+        <View style={[styles.hero, { backgroundColor: withAlpha(leagueThemeColor, '1A'), borderColor: withAlpha(leagueThemeColor, '80') }]}>
+          <View style={styles.heroTextBox}>
+            <Text style={styles.heroOverline}>FL Liga · Mobile Live</Text>
+            <Text style={styles.title}>{leagueName}</Text>
+            <Text style={styles.subtitle}>{leagueSubtitle}</Text>
+          </View>
+          <Image source={heroLogoSource} style={styles.heroLogo} />
         </View>
 
-        {leaguesQuery.isLoading && <ActivityIndicator color="#38bdf8" />}
-        {leaguesQuery.isError && <Text style={styles.error}>No se pudieron cargar ligas públicas.</Text>}
+        {clientsQuery.isLoading && <ActivityIndicator color="#38bdf8" />}
+        {clientsQuery.isError && (
+          <Text style={styles.error}>
+            No se pudieron cargar clientes desde backend público. Verifica Render y Mongo.
+          </Text>
+        )}
 
-        {leaguesQuery.data && leaguesQuery.data.length > 0 && (
+        <Text style={styles.sectionTitle}>Clientes / Usuarios</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+          {(clientsQuery.data ?? []).map((client) => (
+            <Pressable
+              key={client.id}
+              style={[styles.chip, selectedClientId === client.id && styles.chipActive, selectedClientId === client.id && { borderColor: leagueThemeColor }]}
+              onPress={() => {
+                setSelectedClientId(client.id)
+                setSelectedLeagueId('')
+                setSelectedCategoryId('')
+                setSelectedRound(1)
+                setSelectedMatchId('')
+              }}
+            >
+              <Text style={[styles.chipText, selectedClientId === client.id && styles.chipTextActive]}>
+                {client.organizationName ?? client.name}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {selectedClient && leagues.length > 0 && (
           <>
+            <Text style={styles.sectionTitle}>Ligas del cliente</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-              {leaguesQuery.data.map((league) => (
+              {leagues.map((league) => (
                 <Pressable
                   key={league.id}
                   style={[styles.chip, selectedLeagueId === league.id && styles.chipActive]}
@@ -284,8 +341,10 @@ const MobileLiveApp = () => {
             </ScrollView>
 
             {categories.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-                {categories.map((category) => (
+              <>
+                <Text style={styles.sectionTitle}>Categorías</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+                  {categories.map((category) => (
                   <Pressable
                     key={category.id}
                     style={[styles.chip, activeCategory?.id === category.id && styles.chipActive]}
@@ -293,16 +352,21 @@ const MobileLiveApp = () => {
                   >
                     <Text style={[styles.chipText, activeCategory?.id === category.id && styles.chipTextActive]}>{category.name}</Text>
                   </Pressable>
-                ))}
-              </ScrollView>
+                  ))}
+                </ScrollView>
+              </>
             )}
           </>
         )}
 
+        {selectedClient && leagues.length === 0 && <Text style={styles.empty}>Este cliente no tiene ligas públicas activas.</Text>}
+
         {fixtureQuery.isLoading && <ActivityIndicator color="#22d3ee" />}
+        {fixtureQuery.isError && <Text style={styles.error}>No se pudo cargar fixture desde backend de Render.</Text>}
 
         {fixtureQuery.data && (
           <>
+            <Text style={styles.sectionTitle}>Fechas</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
               {fixtureQuery.data.fixture.rounds.map((round) => (
                 <Pressable
@@ -317,6 +381,8 @@ const MobileLiveApp = () => {
                 </Pressable>
               ))}
             </ScrollView>
+
+            <Text style={styles.sectionTitle}>Partidos</Text>
 
             <FlatList
               data={matchesByRound}
@@ -340,7 +406,7 @@ const MobileLiveApp = () => {
 
             {selectedMatch && (
               <View style={styles.detailCard}>
-                <Text style={styles.detailTitle}>Marcador en vivo</Text>
+                <Text style={styles.detailTitle}>Marcador del partido</Text>
                 <Text style={styles.score}>{scoreLine}</Text>
                 <Text style={styles.detailMeta}>
                   {teamsMap.get(selectedMatch.homeTeamId)} vs {teamsMap.get(selectedMatch.awayTeamId)}
@@ -388,9 +454,7 @@ const MobileLiveApp = () => {
                   <>
                     <Text style={styles.sectionTitle}>Videos de mejores jugadas / goles</Text>
                     {highlightVideos.length === 0 ? (
-                      <Text style={styles.empty}>
-                        Aún no hay videos publicados para este partido. Recomendación: subirlos desde Admin/Super Admin y exponerlos en endpoint público.
-                      </Text>
+                      <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
                     ) : (
                       highlightVideos.map((video) => (
                         <View key={video.id} style={styles.videoRow}>
@@ -405,6 +469,25 @@ const MobileLiveApp = () => {
             )}
           </>
         )}
+
+        <View style={styles.footerBox}>
+          <View style={styles.footerBrandRow}>
+            <Image source={defaultFLLogo} style={styles.footerLogo} />
+            <View style={styles.footerBrandText}>
+              <Text style={styles.footerBrandTitle}>Fernando Lara Soft</Text>
+              <Text style={styles.footerBrandSubtitle}>Soluciones digitales innovadoras para tu negocio</Text>
+              <Text style={styles.footerBrandAuthor}>Desarrollado por Fernando Lara Morán</Text>
+              <Text style={styles.footerCopy}>© {year} Todos los derechos reservados</Text>
+            </View>
+          </View>
+
+          <View style={styles.footerContactCard}>
+            <Text style={styles.footerContactTitle}>Contacto directo</Text>
+            <Text style={styles.footerContactItem}>WhatsApp: +593 993385551</Text>
+            <Text style={styles.footerContactItem}>Celular: +593 993385551</Text>
+            <Text style={styles.footerContactItem}>fernando.lara.moran@gmail.com</Text>
+          </View>
+        </View>
       </View>
     </SafeAreaView>
   )
@@ -429,38 +512,43 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 10,
   },
+  hero: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  heroTextBox: {
+    flex: 1,
+    gap: 3,
+  },
+  heroOverline: {
+    color: '#bae6fd',
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '700',
+  },
+  heroLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+    borderColor: '#334155',
+    borderWidth: 1,
+    padding: 2,
+  },
   title: {
     color: '#f8fafc',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
   },
   subtitle: {
     color: '#94a3b8',
     fontSize: 12,
-  },
-  clientRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-    borderColor: '#1e293b',
-    borderWidth: 1,
-    color: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  button: {
-    backgroundColor: '#0ea5e9',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: '#082f49',
-    fontWeight: '700',
   },
   chipsRow: {
     maxHeight: 40,
@@ -476,7 +564,7 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     backgroundColor: '#155e75',
-    borderColor: '#22d3ee',
+    borderColor: '#38bdf8',
   },
   chipText: {
     color: '#cbd5e1',
@@ -512,9 +600,9 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     backgroundColor: '#0f172a',
-    borderColor: '#1e293b',
+    borderColor: '#334155',
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 10,
   },
@@ -637,6 +725,68 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#fda4af',
+    fontSize: 12,
+  },
+  footerBox: {
+    marginTop: 6,
+    marginBottom: 12,
+    gap: 10,
+  },
+  footerBrandRow: {
+    flexDirection: 'row',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 14,
+    backgroundColor: '#0b1120',
+    padding: 10,
+  },
+  footerLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    borderColor: '#334155',
+    borderWidth: 1,
+    padding: 2,
+  },
+  footerBrandText: {
+    flex: 1,
+    gap: 2,
+  },
+  footerBrandTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  footerBrandSubtitle: {
+    color: '#cbd5e1',
+    fontSize: 12,
+  },
+  footerBrandAuthor: {
+    color: '#7dd3fc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footerCopy: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  footerContactCard: {
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 14,
+    backgroundColor: '#0b1120',
+    padding: 10,
+    gap: 3,
+  },
+  footerContactTitle: {
+    color: '#f8fafc',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  footerContactItem: {
+    color: '#cbd5e1',
     fontSize: 12,
   },
 })
