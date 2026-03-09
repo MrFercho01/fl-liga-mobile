@@ -4,12 +4,12 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -19,6 +19,11 @@ import type { LiveEvent, LiveMatch, PublicClientSummary, ScheduledMatch } from '
 
 const queryClient = new QueryClient()
 const defaultFLLogo = require('./assets/icon.png')
+const webLogoUri = 'https://fl-liga-frontend.vercel.app/logo.png'
+
+type AppStep = 'company' | 'league' | 'matches' | 'match'
+type LeagueTab = 'matches' | 'overview'
+type MatchTab = 'pitch' | 'events' | 'highlights'
 
 const formatMatchId = (round: number, index: number, homeTeamId: string, awayTeamId: string) =>
   `${round}-${index}-${homeTeamId}-${awayTeamId}`
@@ -38,19 +43,21 @@ const eventLabel: Record<LiveEvent['type'], string> = {
 }
 
 const withAlpha = (hex: string | undefined, alphaHex: string) => {
-  if (!hex) return '#0f172a'
+  if (!hex) return '#020617'
   const value = hex.trim()
-  if (!/^#([0-9a-fA-F]{6})$/.test(value)) return '#0f172a'
+  if (!/^#([0-9a-fA-F]{6})$/.test(value)) return '#020617'
   return `${value}${alphaHex}`
 }
 
 const MobileLiveApp = () => {
+  const [step, setStep] = useState<AppStep>('company')
   const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedLeagueId, setSelectedLeagueId] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [selectedRound, setSelectedRound] = useState(1)
   const [selectedMatchId, setSelectedMatchId] = useState('')
-  const [activeTab, setActiveTab] = useState<'live' | 'highlights'>('live')
+  const [activeLeagueTab, setActiveLeagueTab] = useState<LeagueTab>('matches')
+  const [activeMatchTab, setActiveMatchTab] = useState<MatchTab>('pitch')
   const [liveMatch, setLiveMatch] = useState<LiveMatch | null>(null)
 
   const clientsQuery = useQuery({
@@ -65,7 +72,6 @@ const MobileLiveApp = () => {
   )
 
   const leagues = selectedClient?.leagues ?? []
-
   const selectedLeague = useMemo(
     () => leagues.find((league) => league.id === selectedLeagueId) ?? null,
     [leagues, selectedLeagueId],
@@ -77,8 +83,12 @@ const MobileLiveApp = () => {
   const fixtureQuery = useQuery({
     queryKey: ['public-fixture', selectedClient?.publicRouteAlias, selectedLeagueId, activeCategory?.id],
     queryFn: () =>
-      mobileApi.getPublicClientLeagueFixture(selectedClient?.publicRouteAlias ?? selectedClient?.id ?? '', selectedLeagueId, activeCategory?.id ?? ''),
-    enabled: Boolean(selectedClient && selectedLeagueId && activeCategory?.id),
+      mobileApi.getPublicClientLeagueFixture(
+        selectedClient?.publicRouteAlias ?? selectedClient?.id ?? '',
+        selectedLeagueId,
+        activeCategory?.id ?? '',
+      ),
+    enabled: Boolean(step !== 'company' && selectedClient && selectedLeagueId && activeCategory?.id),
     staleTime: 30_000,
   })
 
@@ -107,7 +117,6 @@ const MobileLiveApp = () => {
   useEffect(() => {
     const firstClient = clientsQuery.data?.[0]
     if (!firstClient) return
-
     setSelectedClientId((current) => current || firstClient.id)
   }, [clientsQuery.data])
 
@@ -119,7 +128,10 @@ const MobileLiveApp = () => {
       return
     }
 
-    setSelectedLeagueId((current) => (current && leagues.some((league) => league.id === current) ? current : firstLeague.id))
+    setSelectedLeagueId((current) =>
+      current && leagues.some((league) => league.id === current) ? current : firstLeague.id,
+    )
+
     setSelectedCategoryId((current) => {
       const hasCurrent = selectedLeague?.categories.some((category) => category.id === current)
       if (hasCurrent) return current
@@ -173,18 +185,19 @@ const MobileLiveApp = () => {
 
   const matchesByRound = useMemo(() => matches.filter((match) => match.round === selectedRound), [matches, selectedRound])
 
-  useEffect(() => {
-    if (matchesByRound.length === 0) return
-    setSelectedMatchId((current) => current || matchesByRound[0]?.id || '')
-  }, [matchesByRound])
-
-  const selectedMatch = matches.find((match) => match.id === selectedMatchId) ?? null
+  const selectedMatch = useMemo(
+    () => matches.find((match) => match.id === selectedMatchId) ?? null,
+    [matches, selectedMatchId],
+  )
 
   const liveForSelected = useMemo(() => {
     if (!liveMatch || !selectedMatch) return null
 
-    const sameOrder = liveMatch.homeTeam.id === selectedMatch.homeTeamId && liveMatch.awayTeam.id === selectedMatch.awayTeamId
-    const swappedOrder = liveMatch.homeTeam.id === selectedMatch.awayTeamId && liveMatch.awayTeam.id === selectedMatch.homeTeamId
+    const sameOrder =
+      liveMatch.homeTeam.id === selectedMatch.homeTeamId && liveMatch.awayTeam.id === selectedMatch.awayTeamId
+    const swappedOrder =
+      liveMatch.homeTeam.id === selectedMatch.awayTeamId && liveMatch.awayTeam.id === selectedMatch.homeTeamId
+
     return sameOrder || swappedOrder ? liveMatch : null
   }, [liveMatch, selectedMatch])
 
@@ -194,31 +207,25 @@ const MobileLiveApp = () => {
   }, [fixtureQuery.data, selectedMatch])
 
   const scoreLine = useMemo(() => {
-    if (!selectedMatch) return 'Selecciona un partido'
-
-    if (liveForSelected) {
-      return `${liveForSelected.homeTeam.stats.goals} - ${liveForSelected.awayTeam.stats.goals}`
-    }
-
-    if (playedRecord) {
-      return `${playedRecord.homeGoals} - ${playedRecord.awayGoals}`
-    }
-
+    if (!selectedMatch) return '0 - 0'
+    if (liveForSelected) return `${liveForSelected.homeTeam.stats.goals} - ${liveForSelected.awayTeam.stats.goals}`
+    if (playedRecord) return `${playedRecord.homeGoals} - ${playedRecord.awayGoals}`
     return '0 - 0'
-  }, [liveForSelected, playedRecord, selectedMatch])
+  }, [selectedMatch, liveForSelected, playedRecord])
 
   const timelineEvents = useMemo(() => {
     if (liveForSelected) {
       return liveForSelected.events.slice().reverse().map((event) => {
-        const team = event.teamId === liveForSelected.homeTeam.id ? liveForSelected.homeTeam : liveForSelected.awayTeam
-        const outName = event.playerId ? (team.players.find((player) => player.id === event.playerId)?.name ?? 'Sin jugadora') : 'Sin jugadora'
+        const team =
+          event.teamId === liveForSelected.homeTeam.id ? liveForSelected.homeTeam : liveForSelected.awayTeam
+        const outName = event.playerId
+          ? team.players.find((player) => player.id === event.playerId)?.name ?? 'Sin jugadora'
+          : 'Sin jugadora'
         const inName = event.substitutionInPlayerId
-          ? (team.players.find((player) => player.id === event.substitutionInPlayerId)?.name ?? '')
+          ? team.players.find((player) => player.id === event.substitutionInPlayerId)?.name ?? ''
           : ''
 
-        const actor = event.type === 'substitution' && inName
-          ? `${outName} ↘ · ${inName} ↗`
-          : outName
+        const actor = event.type === 'substitution' && inName ? `${outName} ↘ · ${inName} ↗` : outName
 
         return {
           id: event.id,
@@ -242,9 +249,12 @@ const MobileLiveApp = () => {
         .reverse()
         .filter((event) => event.type === 'goal' || event.type === 'penalty_goal')
         .map((event) => {
-          const team = event.teamId === liveForSelected.homeTeam.id ? liveForSelected.homeTeam : liveForSelected.awayTeam
+          const team =
+            event.teamId === liveForSelected.homeTeam.id ? liveForSelected.homeTeam : liveForSelected.awayTeam
           const playerName = event.playerId
-            ? (team.players.find((player) => player.id === event.playerId)?.name ?? 'Sin jugadora')
+            ? liveForSelected.homeTeam.players.find((player) => player.id === event.playerId)?.name ??
+              liveForSelected.awayTeam.players.find((player) => player.id === event.playerId)?.name ??
+              'Sin jugadora'
             : 'Sin jugadora'
 
           return {
@@ -271,60 +281,89 @@ const MobileLiveApp = () => {
   }, [liveForSelected, playedRecord])
 
   const highlightVideos = playedRecord?.highlightVideos ?? []
+  const selectedMatchIsPlayed = Boolean(selectedMatch && selectedMatch.played)
+  const selectedMatchIsLive = Boolean(liveForSelected)
 
   const leagueThemeColor = fixtureQuery.data?.league.themeColor ?? selectedLeague?.themeColor ?? '#0ea5e9'
   const leagueLogoUrl = fixtureQuery.data?.league.logoUrl ?? selectedLeague?.logoUrl
-  const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : defaultFLLogo
+  const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : { uri: webLogoUri }
   const year = new Date().getFullYear()
   const leagueName = fixtureQuery.data?.league.name ?? selectedLeague?.name ?? 'FL Liga Mobile'
   const leagueSubtitle = selectedClient?.organizationName
     ? `${selectedClient.organizationName} · ${activeCategory?.name ?? 'Categorías'}`
     : `${selectedClient?.name ?? 'Multicliente'} · ${activeCategory?.name ?? 'Categorías'}`
 
+  const handleBack = () => {
+    if (step === 'match') {
+      setStep('matches')
+      return
+    }
+
+    if (step === 'matches') {
+      setStep('league')
+      return
+    }
+
+    if (step === 'league') {
+      setStep('company')
+    }
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: withAlpha(leagueThemeColor, '22') }]}>
       <StatusBar style="light" />
       <View style={styles.container}>
-        <View style={[styles.hero, { backgroundColor: withAlpha(leagueThemeColor, '1A'), borderColor: withAlpha(leagueThemeColor, '80') }]}>
+        <View style={styles.topRow}>{step !== 'company' && <Pressable style={styles.backButton} onPress={handleBack}><Text style={styles.backButtonText}>← Volver</Text></Pressable>}</View>
+
+        <View
+          style={[
+            styles.hero,
+            {
+              backgroundColor: withAlpha(leagueThemeColor, '1A'),
+              borderColor: withAlpha(leagueThemeColor, '88'),
+            },
+          ]}
+        >
           <View style={styles.heroTextBox}>
             <Text style={styles.heroOverline}>FL Liga · Mobile Live</Text>
             <Text style={styles.title}>{leagueName}</Text>
             <Text style={styles.subtitle}>{leagueSubtitle}</Text>
           </View>
-          <Image source={heroLogoSource} style={styles.heroLogo} />
+          <Image source={heroLogoSource} defaultSource={defaultFLLogo} style={styles.heroLogo} />
         </View>
 
         {clientsQuery.isLoading && <ActivityIndicator color="#38bdf8" />}
-        {clientsQuery.isError && (
-          <Text style={styles.error}>
-            No se pudieron cargar clientes desde backend público. Verifica Render y Mongo.
-          </Text>
+        {clientsQuery.isError && <Text style={styles.error}>No se pudieron cargar clientes desde Render/Mongo.</Text>}
+
+        {step === 'company' && (
+          <>
+            <Text style={styles.sectionTitle}>1) Elige la empresa</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+              {(clientsQuery.data ?? []).map((client) => (
+                <Pressable
+                  key={client.id}
+                  style={[styles.chip, selectedClientId === client.id && styles.chipActive]}
+                  onPress={() => {
+                    setSelectedClientId(client.id)
+                    setSelectedLeagueId('')
+                    setSelectedCategoryId('')
+                    setSelectedRound(1)
+                    setSelectedMatchId('')
+                    setStep('league')
+                  }}
+                >
+                  <Text style={[styles.chipText, selectedClientId === client.id && styles.chipTextActive]}>
+                    {client.organizationName ?? client.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
         )}
 
-        <Text style={styles.sectionTitle}>Clientes / Usuarios</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-          {(clientsQuery.data ?? []).map((client) => (
-            <Pressable
-              key={client.id}
-              style={[styles.chip, selectedClientId === client.id && styles.chipActive, selectedClientId === client.id && { borderColor: leagueThemeColor }]}
-              onPress={() => {
-                setSelectedClientId(client.id)
-                setSelectedLeagueId('')
-                setSelectedCategoryId('')
-                setSelectedRound(1)
-                setSelectedMatchId('')
-              }}
-            >
-              <Text style={[styles.chipText, selectedClientId === client.id && styles.chipTextActive]}>
-                {client.organizationName ?? client.name}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {selectedClient && leagues.length > 0 && (
+        {step === 'league' && selectedClient && (
           <>
-            <Text style={styles.sectionTitle}>Ligas del cliente</Text>
+            <Text style={styles.sectionTitle}>2) Elige la liga del cliente</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
               {leagues.map((league) => (
                 <Pressable
@@ -333,146 +372,223 @@ const MobileLiveApp = () => {
                   onPress={() => {
                     setSelectedLeagueId(league.id)
                     setSelectedCategoryId(league.categories[0]?.id ?? '')
+                    setSelectedRound(1)
+                    setSelectedMatchId('')
+                    setStep('matches')
                   }}
                 >
                   <Text style={[styles.chipText, selectedLeagueId === league.id && styles.chipTextActive]}>{league.name}</Text>
                 </Pressable>
               ))}
             </ScrollView>
+            {leagues.length === 0 && <Text style={styles.empty}>Este cliente no tiene ligas públicas activas.</Text>}
+          </>
+        )}
 
-            {categories.length > 0 && (
+        {step === 'matches' && fixtureQuery.isLoading && <ActivityIndicator color="#22d3ee" />}
+        {step === 'matches' && fixtureQuery.isError && (
+          <Text style={styles.error}>No se pudo cargar fixture desde backend de Render/Mongo.</Text>
+        )}
+
+        {step === 'matches' && fixtureQuery.data && (
+          <>
+            <View style={styles.tabsRow}>
+              <Pressable
+                style={[styles.tab, activeLeagueTab === 'matches' && styles.tabActive]}
+                onPress={() => setActiveLeagueTab('matches')}
+              >
+                <Text style={[styles.tabText, activeLeagueTab === 'matches' && styles.tabTextActive]}>Partidos</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeLeagueTab === 'overview' && styles.tabActive]}
+                onPress={() => setActiveLeagueTab('overview')}
+              >
+                <Text style={[styles.tabText, activeLeagueTab === 'overview' && styles.tabTextActive]}>Resumen</Text>
+              </Pressable>
+            </View>
+
+            {activeLeagueTab === 'matches' ? (
               <>
                 <Text style={styles.sectionTitle}>Categorías</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
                   {categories.map((category) => (
-                  <Pressable
-                    key={category.id}
-                    style={[styles.chip, activeCategory?.id === category.id && styles.chipActive]}
-                    onPress={() => setSelectedCategoryId(category.id)}
-                  >
-                    <Text style={[styles.chipText, activeCategory?.id === category.id && styles.chipTextActive]}>{category.name}</Text>
-                  </Pressable>
+                    <Pressable
+                      key={category.id}
+                      style={[styles.chip, activeCategory?.id === category.id && styles.chipActive]}
+                      onPress={() => {
+                        setSelectedCategoryId(category.id)
+                        setSelectedRound(1)
+                        setSelectedMatchId('')
+                      }}
+                    >
+                      <Text style={[styles.chipText, activeCategory?.id === category.id && styles.chipTextActive]}>
+                        {category.name}
+                      </Text>
+                    </Pressable>
                   ))}
                 </ScrollView>
-              </>
-            )}
-          </>
-        )}
 
-        {selectedClient && leagues.length === 0 && <Text style={styles.empty}>Este cliente no tiene ligas públicas activas.</Text>}
+                <Text style={styles.sectionTitle}>Fechas</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+                  {fixtureQuery.data.fixture.rounds.map((round) => (
+                    <Pressable
+                      key={round.round}
+                      style={[styles.chip, selectedRound === round.round && styles.chipActive]}
+                      onPress={() => {
+                        setSelectedRound(round.round)
+                        setSelectedMatchId('')
+                      }}
+                    >
+                      <Text style={[styles.chipText, selectedRound === round.round && styles.chipTextActive]}>
+                        Fecha {round.round}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
 
-        {fixtureQuery.isLoading && <ActivityIndicator color="#22d3ee" />}
-        {fixtureQuery.isError && <Text style={styles.error}>No se pudo cargar fixture desde backend de Render.</Text>}
-
-        {fixtureQuery.data && (
-          <>
-            <Text style={styles.sectionTitle}>Fechas</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-              {fixtureQuery.data.fixture.rounds.map((round) => (
-                <Pressable
-                  key={round.round}
-                  style={[styles.chip, selectedRound === round.round && styles.chipActive]}
-                  onPress={() => {
-                    setSelectedRound(round.round)
-                    setSelectedMatchId('')
+                <Text style={styles.sectionTitle}>Partidos (jugados y por jugar)</Text>
+                <FlatList
+                  data={matchesByRound}
+                  keyExtractor={(item) => item.id}
+                  style={styles.matchList}
+                  renderItem={({ item }) => {
+                    const homeName = teamsMap.get(item.homeTeamId) ?? 'Local'
+                    const awayName = teamsMap.get(item.awayTeamId) ?? 'Visita'
+                    return (
+                      <Pressable
+                        style={styles.matchCard}
+                        onPress={() => {
+                          setSelectedMatchId(item.id)
+                          setActiveMatchTab('pitch')
+                          setStep('match')
+                        }}
+                      >
+                        <Text style={styles.matchText}>{homeName} vs {awayName}</Text>
+                        <Text style={styles.matchMeta}>
+                          {item.played ? 'Finalizado' : item.scheduledAt ? 'Programado' : 'Pendiente'}
+                        </Text>
+                      </Pressable>
+                    )
                   }}
-                >
-                  <Text style={[styles.chipText, selectedRound === round.round && styles.chipTextActive]}>Fecha {round.round}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.sectionTitle}>Partidos</Text>
-
-            <FlatList
-              data={matchesByRound}
-              keyExtractor={(item) => item.id}
-              style={styles.matchList}
-              renderItem={({ item }) => {
-                const homeName = teamsMap.get(item.homeTeamId) ?? 'Local'
-                const awayName = teamsMap.get(item.awayTeamId) ?? 'Visita'
-                return (
-                  <Pressable
-                    style={[styles.matchCard, selectedMatchId === item.id && styles.matchCardActive]}
-                    onPress={() => setSelectedMatchId(item.id)}
-                  >
-                    <Text style={styles.matchText}>{homeName} vs {awayName}</Text>
-                    <Text style={styles.matchMeta}>{item.played ? 'Finalizado' : item.scheduledAt ? 'Programado' : 'Pendiente'}</Text>
-                  </Pressable>
-                )
-              }}
-              ListEmptyComponent={<Text style={styles.empty}>Sin partidos para esta fecha.</Text>}
-            />
-
-            {selectedMatch && (
+                  ListEmptyComponent={<Text style={styles.empty}>Sin partidos para esta fecha.</Text>}
+                />
+              </>
+            ) : (
               <View style={styles.detailCard}>
-                <Text style={styles.detailTitle}>Marcador del partido</Text>
-                <Text style={styles.score}>{scoreLine}</Text>
-                <Text style={styles.detailMeta}>
-                  {teamsMap.get(selectedMatch.homeTeamId)} vs {teamsMap.get(selectedMatch.awayTeamId)}
-                </Text>
-
-                <View style={styles.tabsRow}>
-                  <Pressable style={[styles.tab, activeTab === 'live' && styles.tabActive]} onPress={() => setActiveTab('live')}>
-                    <Text style={[styles.tabText, activeTab === 'live' && styles.tabTextActive]}>Eventos</Text>
-                  </Pressable>
-                  <Pressable style={[styles.tab, activeTab === 'highlights' && styles.tabActive]} onPress={() => setActiveTab('highlights')}>
-                    <Text style={[styles.tabText, activeTab === 'highlights' && styles.tabTextActive]}>Highlights</Text>
-                  </Pressable>
-                </View>
-
-                {activeTab === 'live' ? (
-                  <>
-                    <Text style={styles.sectionTitle}>Tabla de goles</Text>
-                    {goalsTable.length === 0 ? (
-                      <Text style={styles.empty}>Aún no hay goles.</Text>
-                    ) : (
-                      <View style={styles.tableWrapper}>
-                        {goalsTable.map((row) => (
-                          <View key={row.id} style={styles.tableRow}>
-                            <Text style={styles.tableMinute}>{row.minute}</Text>
-                            <Text numberOfLines={1} style={styles.tableTeam}>{row.teamName}</Text>
-                            <Text numberOfLines={1} style={styles.tablePlayer}>{row.playerName}</Text>
-                            <Text style={styles.tableType}>{row.type}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    <Text style={styles.sectionTitle}>Eventos del partido</Text>
-                    <View style={styles.eventsBox}>
-                      {timelineEvents.length === 0 ? (
-                        <Text style={styles.empty}>Sin eventos todavía.</Text>
-                      ) : (
-                        timelineEvents.slice(0, 18).map((event) => (
-                          <Text key={event.id} style={styles.eventItem}>{event.text}</Text>
-                        ))
-                      )}
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.sectionTitle}>Videos de mejores jugadas / goles</Text>
-                    {highlightVideos.length === 0 ? (
-                      <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
-                    ) : (
-                      highlightVideos.map((video) => (
-                        <View key={video.id} style={styles.videoRow}>
-                          <Text style={styles.videoName}>{video.name}</Text>
-                          <Text numberOfLines={1} style={styles.videoUrl}>{video.url}</Text>
-                        </View>
-                      ))
-                    )}
-                  </>
-                )}
+                <Text style={styles.detailTitle}>Liga seleccionada</Text>
+                <Text style={styles.scoreLabel}>{leagueName}</Text>
+                <Text style={styles.detailMeta}>{activeCategory?.name ?? 'Sin categoría activa'}</Text>
               </View>
             )}
           </>
         )}
 
+        {step === 'match' && selectedMatch && (
+          <View style={styles.detailCard}>
+            <Text style={styles.detailTitle}>
+              {selectedMatchIsLive ? 'Partido en vivo' : selectedMatchIsPlayed ? 'Partido finalizado' : 'Partido programado'}
+            </Text>
+            <Text style={styles.score}>{scoreLine}</Text>
+            <Text style={styles.detailMeta}>
+              {teamsMap.get(selectedMatch.homeTeamId)} vs {teamsMap.get(selectedMatch.awayTeamId)}
+            </Text>
+
+            <View style={styles.tabsRow}>
+              <Pressable
+                style={[styles.tab, activeMatchTab === 'pitch' && styles.tabActive]}
+                onPress={() => setActiveMatchTab('pitch')}
+              >
+                <Text style={[styles.tabText, activeMatchTab === 'pitch' && styles.tabTextActive]}>Cancha</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeMatchTab === 'events' && styles.tabActive]}
+                onPress={() => setActiveMatchTab('events')}
+              >
+                <Text style={[styles.tabText, activeMatchTab === 'events' && styles.tabTextActive]}>Eventos</Text>
+              </Pressable>
+              {selectedMatchIsPlayed && (
+                <Pressable
+                  style={[styles.tab, activeMatchTab === 'highlights' && styles.tabActive]}
+                  onPress={() => setActiveMatchTab('highlights')}
+                >
+                  <Text style={[styles.tabText, activeMatchTab === 'highlights' && styles.tabTextActive]}>Highlights</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {activeMatchTab === 'pitch' && (
+              <View style={styles.pitchCard}>
+                <View style={styles.pitchField}>
+                  <View style={styles.pitchHalfLine} />
+                  <View style={styles.pitchCenterCircle} />
+                  <View style={styles.pitchBoxLeft} />
+                  <View style={styles.pitchBoxRight} />
+                </View>
+                <View style={styles.pitchInfoRow}>
+                  <Text style={styles.pitchTeam}>{teamsMap.get(selectedMatch.homeTeamId) ?? 'Local'}</Text>
+                  <Text style={styles.pitchScore}>{scoreLine}</Text>
+                  <Text style={styles.pitchTeam}>{teamsMap.get(selectedMatch.awayTeamId) ?? 'Visita'}</Text>
+                </View>
+                {selectedMatchIsLive && <Text style={styles.pitchStatus}>En vivo · {liveForSelected?.currentMinute ?? 0}'</Text>}
+                {!selectedMatchIsLive && selectedMatchIsPlayed && (
+                  <Text style={styles.pitchStatus}>Finalizado · {playedRecord?.finalMinute ?? 0}'</Text>
+                )}
+                {!selectedMatchIsLive && !selectedMatchIsPlayed && <Text style={styles.pitchStatus}>Programado</Text>}
+              </View>
+            )}
+
+            {activeMatchTab === 'events' && (
+              <>
+                <Text style={styles.sectionTitle}>Tabla de goles</Text>
+                {goalsTable.length === 0 ? (
+                  <Text style={styles.empty}>Aún no hay goles.</Text>
+                ) : (
+                  <View style={styles.tableWrapper}>
+                    {goalsTable.map((row) => (
+                      <View key={row.id} style={styles.tableRow}>
+                        <Text style={styles.tableMinute}>{row.minute}</Text>
+                        <Text numberOfLines={1} style={styles.tableTeam}>{row.teamName}</Text>
+                        <Text numberOfLines={1} style={styles.tablePlayer}>{row.playerName}</Text>
+                        <Text style={styles.tableType}>{row.type}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <Text style={styles.sectionTitle}>Eventos del partido</Text>
+                <View style={styles.eventsBox}>
+                  {timelineEvents.length === 0 ? (
+                    <Text style={styles.empty}>Sin eventos todavía.</Text>
+                  ) : (
+                    timelineEvents.slice(0, 20).map((event) => (
+                      <Text key={event.id} style={styles.eventItem}>{event.text}</Text>
+                    ))
+                  )}
+                </View>
+              </>
+            )}
+
+            {activeMatchTab === 'highlights' && selectedMatchIsPlayed && (
+              <>
+                <Text style={styles.sectionTitle}>Highlights</Text>
+                {highlightVideos.length === 0 ? (
+                  <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
+                ) : (
+                  highlightVideos.map((video) => (
+                    <Pressable key={video.id} style={styles.videoRow} onPress={() => void Linking.openURL(video.url)}>
+                      <Text style={styles.videoName}>{video.name}</Text>
+                      <Text numberOfLines={1} style={styles.videoUrl}>{video.url}</Text>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         <View style={styles.footerBox}>
           <View style={styles.footerBrandRow}>
-            <Image source={defaultFLLogo} style={styles.footerLogo} />
+            <Image source={{ uri: webLogoUri }} defaultSource={defaultFLLogo} style={styles.footerLogo} />
             <View style={styles.footerBrandText}>
               <Text style={styles.footerBrandTitle}>Fernando Lara Soft</Text>
               <Text style={styles.footerBrandSubtitle}>Soluciones digitales innovadoras para tu negocio</Text>
@@ -512,6 +628,23 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 10,
   },
+  topRow: {
+    minHeight: 24,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  backButtonText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   hero: {
     borderWidth: 1,
     borderRadius: 16,
@@ -539,7 +672,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderColor: '#334155',
     borderWidth: 1,
-    padding: 2,
   },
   title: {
     color: '#f8fafc',
@@ -575,7 +707,7 @@ const styles = StyleSheet.create({
     color: '#cffafe',
   },
   matchList: {
-    maxHeight: 190,
+    maxHeight: 230,
   },
   matchCard: {
     backgroundColor: '#0f172a',
@@ -584,10 +716,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     marginBottom: 8,
-  },
-  matchCardActive: {
-    borderColor: '#22d3ee',
-    backgroundColor: '#0b2537',
   },
   matchText: {
     color: '#f8fafc',
@@ -618,6 +746,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
+  scoreLabel: {
+    color: '#f8fafc',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 6,
+  },
   detailMeta: {
     color: '#94a3b8',
     marginTop: 2,
@@ -643,6 +777,7 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#cbd5e1',
     fontWeight: '600',
+    fontSize: 12,
   },
   tabTextActive: {
     color: '#cffafe',
@@ -658,6 +793,7 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     borderRadius: 10,
     overflow: 'hidden',
+    marginBottom: 8,
   },
   tableRow: {
     flexDirection: 'row',
@@ -719,6 +855,87 @@ const styles = StyleSheet.create({
     color: '#7dd3fc',
     fontSize: 12,
   },
+  pitchCard: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: '#0b1220',
+    gap: 8,
+  },
+  pitchField: {
+    height: 160,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#84cc16',
+    backgroundColor: '#14532d',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  pitchHalfLine: {
+    position: 'absolute',
+    left: '50%',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: '#bbf7d0',
+    marginLeft: -1,
+  },
+  pitchCenterCircle: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#bbf7d0',
+    marginLeft: -25,
+    marginTop: -25,
+  },
+  pitchBoxLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 45,
+    width: 28,
+    height: 70,
+    borderWidth: 2,
+    borderColor: '#bbf7d0',
+    borderLeftWidth: 0,
+  },
+  pitchBoxRight: {
+    position: 'absolute',
+    right: 0,
+    top: 45,
+    width: 28,
+    height: 70,
+    borderWidth: 2,
+    borderColor: '#bbf7d0',
+    borderRightWidth: 0,
+  },
+  pitchInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pitchTeam: {
+    flex: 1,
+    color: '#e2e8f0',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  pitchScore: {
+    color: '#f8fafc',
+    fontSize: 26,
+    fontWeight: '800',
+  },
+  pitchStatus: {
+    color: '#67e8f9',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   empty: {
     color: '#94a3b8',
     fontSize: 12,
@@ -748,7 +965,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderColor: '#334155',
     borderWidth: 1,
-    padding: 2,
   },
   footerBrandText: {
     flex: 1,
