@@ -23,15 +23,21 @@ Aplicación móvil multiplataforma para usuarios finales con enfoque en:
 npm install
 ```
 
-2. Configurar URL del backend (recomendado):
+2. Configurar URL del backend (obligatorio para preview/production):
 
 ```bash
-EXPO_PUBLIC_API_URL=http://TU_BACKEND:4000
+EXPO_PUBLIC_API_URL=https://TU_BACKEND_PUBLICO
 ```
 
 > Si no defines variable, usa fallback:
 > - Android emulador: `http://10.0.2.2:4000`
 > - iOS simulador: `http://localhost:4000`
+
+### Importante sobre MongoDB
+
+- La app **NO** se conecta directo a MongoDB.
+- La app se conecta al **backend** (`HTTP + Socket.IO`), y ese backend es quien lee/escribe en Mongo.
+- Esto es lo correcto para seguridad, escalabilidad y control de permisos.
 
 3. Ejecutar app:
 
@@ -66,3 +72,21 @@ Crear una pestaña dedicada en Admin (web) para cargar highlights por partido (n
 4. Crash/Error monitoring (Sentry)
 5. CDN para videos (Cloudflare R2 / Mux / Cloudinary)
 6. Push notifications para goles
+
+## EAS Build (iOS/Android)
+
+Archivo listo: `eas.json` con perfiles:
+
+- `development`: cliente dev interno
+- `preview`: build interna para QA
+- `production`: build de tienda
+
+Comandos:
+
+```bash
+npx eas login
+npx eas build --platform android --profile preview
+npx eas build --platform ios --profile preview
+npx eas build --platform android --profile production
+npx eas build --platform ios --profile production
+```
