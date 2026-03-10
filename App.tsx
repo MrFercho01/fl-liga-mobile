@@ -1736,11 +1736,16 @@ const MobileLiveApp = () => {
                 {highlightVideos.length === 0 ? (
                   <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
                 ) : (
-                  <>
+                  <ScrollView
+                    style={styles.highlightVideosScroll}
+                    contentContainerStyle={styles.highlightVideosScrollContent}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
                     {highlightVideos.map((video) => (
                       <HighlightVideoCard key={video.id} name={video.name} url={video.url} />
                     ))}
-                  </>
+                  </ScrollView>
                 )}
               </>
             )}
@@ -2195,6 +2200,12 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     backgroundColor: '#0f172a',
+  },
+  highlightVideosScroll: {
+    maxHeight: 460,
+  },
+  highlightVideosScrollContent: {
+    paddingBottom: 6,
   },
   videoName: {
     color: '#f8fafc',
