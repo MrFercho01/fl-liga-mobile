@@ -1574,12 +1574,14 @@ const MobileLiveApp = () => {
                 {highlightVideos.length === 0 ? (
                   <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
                 ) : (
-                  highlightVideos.map((video) => (
-                    <Pressable key={video.id} style={styles.videoRow} onPress={() => void Linking.openURL(video.url)}>
-                      <Text style={styles.videoName}>{video.name}</Text>
-                      <Text numberOfLines={1} style={styles.videoUrl}>{video.url}</Text>
-                    </Pressable>
-                  ))
+                  <>
+                    {highlightVideos.map((video) => (
+                      <Pressable key={video.id} style={styles.videoRow} onPress={() => void Linking.openURL(video.url)}>
+                        <Text style={styles.videoName}>{video.name}</Text>
+                        <Text numberOfLines={1} style={styles.videoUrl}>{video.url}</Text>
+                      </Pressable>
+                    ))}
+                  </>
                 )}
               </>
             )}
