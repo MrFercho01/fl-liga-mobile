@@ -24,6 +24,8 @@ export interface PublicTeam {
   id: string
   name: string
   logoUrl?: string
+  primaryColor?: string
+  secondaryColor?: string
   players: Array<{
     id: string
     name: string

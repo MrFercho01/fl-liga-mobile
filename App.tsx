@@ -221,9 +221,15 @@ const getAccentColor = (hexColor: string): string => {
   return getContrastColor(hexColor) === '#ffffff' ? '#e2e8f0' : '#0f172a'
 }
 
-const getTeamColor = (teamIdOrTeam: string | { id: string; primaryColor?: string }): string => {
+const getTeamColor = (teamIdOrTeam: string | { id: string; primaryColor?: string; secondaryColor?: string }, useSecondary = false): string => {
   const teamId = typeof teamIdOrTeam === 'string' ? teamIdOrTeam : teamIdOrTeam.id
   const primaryColor = typeof teamIdOrTeam === 'object' ? teamIdOrTeam.primaryColor : undefined
+  const secondaryColor = typeof teamIdOrTeam === 'object' ? teamIdOrTeam.secondaryColor : undefined
+
+  // Si se solicita color secundario y existe, usarlo
+  if (useSecondary && secondaryColor) {
+    return secondaryColor
+  }
 
   // Si hay color primario, usarlo
   if (primaryColor) {
@@ -239,6 +245,24 @@ const getTeamColor = (teamIdOrTeam: string | { id: string; primaryColor?: string
   const saturation = 65 + (Math.abs(hash >> 8) % 20)
   const lightness = 50 + (Math.abs(hash >> 16) % 15)
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+const getMatchTeamColors = (homeTeam: { id: string; primaryColor?: string; secondaryColor?: string } | undefined, awayTeam: { id: string; primaryColor?: string; secondaryColor?: string } | undefined) => {
+  const homeColor = homeTeam ? getTeamColor(homeTeam) : '#3b82f6'
+  const awayColorPrimary = awayTeam ? getTeamColor(awayTeam) : '#ef4444'
+  
+  // Si los colores son muy similares, usar el color secundario del visitante
+  if (homeColor === awayColorPrimary && awayTeam?.secondaryColor) {
+    return {
+      home: homeColor,
+      away: getTeamColor(awayTeam, true)
+    }
+  }
+  
+  return {
+    home: homeColor,
+    away: awayColorPrimary
+  }
 }
 
 const formatScheduleLabel = (isoDate?: string) => {
@@ -1091,7 +1115,7 @@ const MobileLiveApp = () => {
                   const mvpTeam = selectedRoundAward.roundBestPlayerTeamId
                     ? fixtureQuery.data?.teams.find((team) => team.id === selectedRoundAward.roundBestPlayerTeamId)
                     : undefined
-                  const mvpTeamColor = mvpTeam ? getTeamColor(mvpTeam) : '#0b1120'
+                  const mvpTeamColor = mvpTeam ? getTeamColor(mvpTeam) : '#3b82f6'
                   const mvpTextColor = getContrastColor(mvpTeamColor)
                   const mvpSecondary = mvpTextColor === '#ffffff' ? '#cbd5e1' : '#64748b'
                   return (
@@ -1336,7 +1360,7 @@ const MobileLiveApp = () => {
 
             {selectedMatchIsPlayed && playedRecord?.playerOfMatchName && (() => {
               const mvpTeam = fixtureQuery.data?.teams.find((team) => team.name === playedRecord.playerOfMatchTeamName)
-              const mvpTeamColor = mvpTeam ? getTeamColor(mvpTeam) : '#0b1120'
+              const mvpTeamColor = mvpTeam ? getTeamColor(mvpTeam) : '#3b82f6'
               const mvpTextColor = getContrastColor(mvpTeamColor)
               const mvpSecondary = mvpTextColor === '#ffffff' ? '#cbd5e1' : '#64748b'
               return (
@@ -1381,53 +1405,80 @@ const MobileLiveApp = () => {
                   <View style={styles.pitchBoxTop} />
                   <View style={styles.pitchBoxBottom} />
 
-                  {pitchLines.away.length > 0 && (
-                    <View style={styles.pitchHalfTop}>
-                      {pitchLines.away.map((line, lineIndex) => {
-                        const awayTeam = fixtureQuery.data?.teams.find((team) => team.id === selectedMatch?.awayTeamId)
-                        const awayTeamColor = awayTeam ? getTeamColor(awayTeam) : getTeamColor(selectedMatch?.awayTeamId ?? '')
-                        return (
-                          <View key={`away-line-${lineIndex}`} style={styles.pitchLine}>
-                            {line.map((player) => {
-                              const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                  {(() => {
+                    const homeTeam = fixtureQuery.data?.teams.find((team) => team.id === selectedMatch?.homeTeamId)
+                    const awayTeam = fixtureQuery.data?.teams.find((team) => team.id === selectedMatch?.awayTeamId)
+                    const teamColors = getMatchTeamColors(homeTeam, awayTeam)
+
+                    return (
+                      <>
+                        {pitchLines.away.length > 0 && (
+                          <View style={styles.pitchHalfTop}>
+                            {pitchLines.away.map((line, lineIndex) => {
                               return (
-                                <View key={player.id} style={styles.pitchPlayerWrap}>
-                                  <View style={[styles.pitchPlayerAway, { backgroundColor: awayTeamColor }]}>
-                                    <Text style={styles.pitchPlayerNumber}>{player.number}</Text>
-                                    {stats?.yellows ? <View style={styles.pitchCardYellow} /> : null}
-                                    {stats?.reds ? <View style={styles.pitchCardRed} /> : null}
-                                  </View>
-                                  <Text numberOfLines={1} style={styles.pitchPlayerName}>{player.name}</Text>
-                                  {stats && (stats.goals > 0 || stats.yellows > 0 || stats.reds > 0) && (
-                                    <Text style={styles.pitchPlayerBadges}>
-                                      {stats.goals > 0 ? `⚽${stats.goals} ` : ''}
-                                      {stats.yellows > 0 ? `TA${stats.yellows} ` : ''}
-                                      {stats.reds > 0 ? `TR${stats.reds}` : ''}
-                                    </Text>
-                                  )}
+                                <View key={`away-line-${lineIndex}`} style={styles.pitchLine}>
+                                  {line.map((player) => {
+                                    const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                                    return (
+                                      <View key={player.id} style={styles.pitchPlayerWrap}>
+                                        <View style={[styles.pitchPlayerAway, { backgroundColor: teamColors.away }]}>
+                                          <Text style={styles.pitchPlayerNumber}>{player.number}</Text>
+                                          {stats?.yellows ? <View style={styles.pitchCardYellow} /> : null}
+                                          {stats?.reds ? <View style={styles.pitchCardRed} /> : null}
+                                        </View>
+                                        <Text numberOfLines={1} style={styles.pitchPlayerName}>{player.name}</Text>
+                                        {stats && (stats.goals > 0 || stats.yellows > 0 || stats.reds > 0) && (
+                                          <Text style={styles.pitchPlayerBadges}>
+                                            {stats.goals > 0 ? `⚽${stats.goals} ` : ''}
+                                            {stats.yellows > 0 ? `TA${stats.yellows} ` : ''}
+                                            {stats.reds > 0 ? `TR${stats.reds}` : ''}
+                                          </Text>
+                                        )}
+                                      </View>
+                                    )
+                                  })}
                                 </View>
                               )
                             })}
                           </View>
-                        )
-                      })}
-                    </View>
-                  )}
+                        )}
 
-                  {pitchLines.home.length > 0 && (
-                    <View style={styles.pitchHalfBottom}>
-                      {pitchLines.home.map((line, lineIndex) => {
-                        const homeTeam = fixtureQuery.data?.teams.find((team) => team.id === selectedMatch?.homeTeamId)
-                        const homeTeamColor = homeTeam ? getTeamColor(homeTeam) : getTeamColor(selectedMatch?.homeTeamId ?? '')
-                        return (
-                          <View key={`home-line-${lineIndex}`} style={styles.pitchLine}>
-                            {line.map((player) => {
-                              const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                        {pitchLines.home.length > 0 && (
+                          <View style={styles.pitchHalfBottom}>
+                            {pitchLines.home.map((line, lineIndex) => {
                               return (
-                                <View key={player.id} style={styles.pitchPlayerWrap}>
-                                  <View style={[styles.pitchPlayerHome, { backgroundColor: homeTeamColor }]}>
-                                    <Text style={styles.pitchPlayerNumber}>{player.number}</Text>
-                                    {stats?.yellows ? <View style={styles.pitchCardYellow} /> : null}
+                                <View key={`home-line-${lineIndex}`} style={styles.pitchLine}>
+                                  {line.map((player) => {
+                                    const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                                    return (
+                                      <View key={player.id} style={styles.pitchPlayerWrap}>
+                                        <View style={[styles.pitchPlayerHome, { backgroundColor: teamColors.home }]}>
+                                          <Text style={styles.pitchPlayerNumber}>{player.number}</Text>
+                                          {stats?.yellows ? <View style={styles.pitchCardYellow} /> : null}
+                                          {stats?.reds ? <View style={styles.pitchCardRed} /> : null}
+                                        </View>
+                                        <Text numberOfLines={1} style={styles.pitchPlayerName}>{player.name}</Text>
+                                        {stats && (stats.goals > 0 || stats.yellows > 0 || stats.reds > 0) && (
+                                          <Text style={styles.pitchPlayerBadges}>
+                                            {stats.goals > 0 ? `⚽${stats.goals} ` : ''}
+                                            {stats.yellows > 0 ? `TA${stats.yellows} ` : ''}
+                                            {stats.reds > 0 ? `TR${stats.reds}` : ''}
+                                          </Text>
+                                        )}
+                                      </View>
+                                    )
+                                  })}
+                                </View>
+                              )
+                            })}
+                          </View>
+                        )}
+                      </>
+                    )
+                  })()}
+                </View>
+              </View>
+            )}
                                     {stats?.reds ? <View style={styles.pitchCardRed} /> : null}
                                   </View>
                                   <Text numberOfLines={1} style={styles.pitchPlayerName}>{player.name}</Text>
