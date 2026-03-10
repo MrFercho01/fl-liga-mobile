@@ -1144,8 +1144,10 @@ const MobileLiveApp = () => {
                   keyExtractor={(item) => item.id}
                   style={styles.matchList}
                   renderItem={({ item }) => {
-                    const homeName = teamsMap.get(item.homeTeamId) ?? 'Local'
-                    const awayName = teamsMap.get(item.awayTeamId) ?? 'Visita'
+                    const homeTeam = teamsById.get(item.homeTeamId)
+                    const awayTeam = teamsById.get(item.awayTeamId)
+                    const homeName = homeTeam?.name ?? 'Local'
+                    const awayName = awayTeam?.name ?? 'Visita'
                     const record = fixtureQuery.data.playedMatches.find((entry) => entry.matchId === item.id)
                     const playedAtLabel = formatScheduleLabel(record?.playedAt)
                     const scheduledLabel = formatScheduleLabel(item.scheduledAt)
@@ -1166,7 +1168,21 @@ const MobileLiveApp = () => {
                           setStep('match')
                         }}
                       >
-                        <Text style={[styles.matchText, { color: contrastTextColor }]}>{homeName} vs {awayName}</Text>
+                        <View style={styles.matchTeamsRow}>
+                          <View style={styles.matchTeam}>
+                            {homeTeam?.logoUrl && (
+                              <Image source={{ uri: homeTeam.logoUrl }} style={styles.matchTeamLogo} />
+                            )}
+                            <Text style={[styles.matchTeamName, { color: contrastTextColor }]}>{homeName}</Text>
+                          </View>
+                          <Text style={[styles.matchVs, { color: secondaryTextColor }]}>vs</Text>
+                          <View style={styles.matchTeam}>
+                            {awayTeam?.logoUrl && (
+                              <Image source={{ uri: awayTeam.logoUrl }} style={styles.matchTeamLogo} />
+                            )}
+                            <Text style={[styles.matchTeamName, { color: contrastTextColor }]}>{awayName}</Text>
+                          </View>
+                        </View>
                         <Text style={[styles.matchMeta, { color: secondaryTextColor }]}>{statusLabel}</Text>
                         {item.venue ? <Text style={[styles.matchVenue, { color: secondaryTextColor }]}>{item.venue}</Text> : null}
                       </Pressable>
@@ -1207,6 +1223,9 @@ const MobileLiveApp = () => {
                       standings.map((team, index) => (
                         <View key={team.teamId} style={[styles.standingsRow, themedMatchCardStyle]}>
                           <Text style={[styles.standingsPosition, { color: contrastTextColor }]}>{index + 1}</Text>
+                          {team.teamLogoUrl && (
+                            <Image source={{ uri: team.teamLogoUrl }} style={styles.teamLogo} />
+                          )}
                           <View style={styles.standingsTeam}>
                             <Text style={[styles.standingsTeamName, { color: contrastTextColor }]}>{team.teamName}</Text>
                             <Text style={[styles.standingsStats, { color: secondaryTextColor }]}>
@@ -1702,6 +1721,34 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontWeight: '600',
   },
+  matchTeamsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  matchTeam: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  matchTeamLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  matchTeamName: {
+    fontWeight: '600',
+    fontSize: 13,
+    flex: 1,
+  },
+  matchVs: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   matchMeta: {
     color: '#64748b',
     fontSize: 12,
@@ -2135,6 +2182,13 @@ const styles = StyleSheet.create({
     color: '#67e8f9',
     fontWeight: '700',
     fontSize: 14,
+  },
+  teamLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
   },
   standingsTeam: {
     flex: 1,
