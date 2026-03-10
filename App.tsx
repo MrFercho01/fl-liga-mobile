@@ -1,11 +1,11 @@
 import { StatusBar } from 'expo-status-bar'
+import { VideoView, useVideoPlayer } from 'expo-video'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as Notifications from 'expo-notifications'
 import {
   ActivityIndicator,
   FlatList,
   Image,
-  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -78,6 +78,26 @@ interface GoalkeeperRanking {
 
 const createManualMatchId = (round: number, homeTeamId: string, awayTeamId: string) =>
   `manual__${round}__${homeTeamId}__${awayTeamId}`
+
+function HighlightVideoCard({ name, url }: { name: string; url: string }) {
+  const player = useVideoPlayer(url, (instance) => {
+    instance.loop = false
+  })
+
+  return (
+    <View style={styles.videoRow}>
+      <Text style={styles.videoName}>{name}</Text>
+      <VideoView
+        player={player}
+        style={styles.videoPlayer}
+        nativeControls
+        allowsFullscreen
+        allowsPictureInPicture
+        contentFit="contain"
+      />
+    </View>
+  )
+}
 
 const parseMatchIdentity = (matchId: string, fallbackRound?: number) => {
   if (matchId.startsWith('manual__')) {
@@ -1718,10 +1738,7 @@ const MobileLiveApp = () => {
                 ) : (
                   <>
                     {highlightVideos.map((video) => (
-                      <Pressable key={video.id} style={styles.videoRow} onPress={() => void Linking.openURL(video.url)}>
-                        <Text style={styles.videoName}>{video.name}</Text>
-                        <Text numberOfLines={1} style={styles.videoUrl}>{video.url}</Text>
-                      </Pressable>
+                      <HighlightVideoCard key={video.id} name={video.name} url={video.url} />
                     ))}
                   </>
                 )}
@@ -2173,16 +2190,23 @@ const styles = StyleSheet.create({
   },
   videoRow: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#334155',
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
     marginBottom: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0f172a',
   },
   videoName: {
     color: '#f8fafc',
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 10,
+  },
+  videoPlayer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 10,
+    backgroundColor: '#020617',
+    overflow: 'hidden',
   },
   videoUrl: {
     color: '#7dd3fc',
