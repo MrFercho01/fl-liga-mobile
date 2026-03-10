@@ -94,6 +94,17 @@ const parseMatchIdentity = (matchId: string, fallbackRound?: number) => {
     }
   }
 
+  // Formato generado: "{round}-{index}-{homeUUID}-{awayUUID}" → 12 partes al dividir por '-'
+  const parts = matchId.split('-')
+  if (parts.length === 12) {
+    const parsedRound = Number(parts[0])
+    const homeTeamId = parts.slice(2, 7).join('-')
+    const awayTeamId = parts.slice(7, 12).join('-')
+    if (Number.isFinite(parsedRound) && homeTeamId.length === 36 && awayTeamId.length === 36) {
+      return { round: parsedRound, homeTeamId, awayTeamId }
+    }
+  }
+
   if (fallbackRound && Number.isFinite(fallbackRound)) {
     return null
   }
@@ -438,8 +449,22 @@ const MobileLiveApp = () => {
     )
     const seenKeys = new Set<string>()
 
-    // Construir matches desde schedule (igual que el frontend web)
-    // Esto asegura que todos los partidos programados aparezcan, incluso si los equipos cambiaron
+    // Mapas de lookup para la hora programada: por matchId y por clave round:home:away
+    const scheduleAtById = new Map<string, string | undefined>()
+    const scheduleAtByKey = new Map<string, string | undefined>()
+    fixture.schedule.forEach((entry) => {
+      scheduleAtById.set(entry.matchId, entry.scheduledAt)
+      const p = parseMatchIdentity(entry.matchId, entry.round)
+      if (p) {
+        scheduleAtByKey.set(buildRoundTeamsKey(entry.round, p.homeTeamId, p.awayTeamId), entry.scheduledAt)
+        scheduleAtByKey.set(buildRoundTeamsKey(entry.round, p.awayTeamId, p.homeTeamId), entry.scheduledAt)
+      }
+    })
+
+    const resolveScheduledAt = (matchId: string, key: string, reverseKey: string, fallback?: string) =>
+      scheduleAtById.get(matchId) ?? scheduleAtByKey.get(key) ?? scheduleAtByKey.get(reverseKey) ?? fallback
+
+    // Construir matches desde schedule
     fixture.schedule.forEach((scheduleEntry) => {
       const parsed = parseMatchIdentity(scheduleEntry.matchId, scheduleEntry.round)
       if (!parsed) return
@@ -468,13 +493,15 @@ const MobileLiveApp = () => {
         if (seenKeys.has(key)) return
         seenKeys.add(key)
 
+        const reverseKey = buildRoundTeamsKey(played.round, parsed.awayTeamId, parsed.homeTeamId)
         result.push({
           id: played.matchId,
           round: played.round,
           homeTeamId: parsed.homeTeamId,
           awayTeamId: parsed.awayTeamId,
           played: true,
-          scheduledAt: played.playedAt,
+          // Prefer scheduled time; only fall back to playedAt if no schedule entry exists
+          scheduledAt: resolveScheduledAt(played.matchId, key, reverseKey, played.playedAt),
         })
         return
       }
@@ -487,13 +514,15 @@ const MobileLiveApp = () => {
       if (seenKeys.has(key)) return
       seenKeys.add(key)
 
+      const reverseKey = buildRoundTeamsKey(played.round, awayTeamId, homeTeamId)
       result.push({
         id: played.matchId,
         round: played.round,
         homeTeamId,
         awayTeamId,
         played: true,
-        scheduledAt: played.playedAt,
+        // Prefer scheduled time; only fall back to playedAt if no schedule entry exists
+        scheduledAt: resolveScheduledAt(played.matchId, key, reverseKey, played.playedAt),
       })
     })
 
@@ -1224,13 +1253,13 @@ const MobileLiveApp = () => {
               <>
                 <View style={styles.tabsRow}>
                   <Pressable style={[styles.tab, activeOverviewTab === 'standings' && styles.tabActive, activeOverviewTab === 'standings' && themedTabActiveStyle]} onPress={() => setActiveOverviewTab('standings')}>
-                    <Text style={[styles.tabText, activeOverviewTab === 'standings' && { color: activeTextColor }]}>Tabla</Text>
+                    <Text style={[styles.tabText, activeOverviewTab === 'standings' && { color: activeTextColor }]}>Posic.</Text>
                   </Pressable>
                   <Pressable style={[styles.tab, activeOverviewTab === 'scorers' && styles.tabActive, activeOverviewTab === 'scorers' && themedTabActiveStyle]} onPress={() => setActiveOverviewTab('scorers')}>
-                    <Text style={[styles.tabText, activeOverviewTab === 'scorers' && { color: activeTextColor }]}>Goleadores</Text>
+                    <Text style={[styles.tabText, activeOverviewTab === 'scorers' && { color: activeTextColor }]}>Goles</Text>
                   </Pressable>
                   <Pressable style={[styles.tab, activeOverviewTab === 'assists' && styles.tabActive, activeOverviewTab === 'assists' && themedTabActiveStyle]} onPress={() => setActiveOverviewTab('assists')}>
-                    <Text style={[styles.tabText, activeOverviewTab === 'assists' && { color: activeTextColor }]}>Asistidores</Text>
+                    <Text style={[styles.tabText, activeOverviewTab === 'assists' && { color: activeTextColor }]}>Asist.</Text>
                   </Pressable>
                   <Pressable style={[styles.tab, activeOverviewTab === 'yellows' && styles.tabActive, activeOverviewTab === 'yellows' && themedTabActiveStyle]} onPress={() => setActiveOverviewTab('yellows')}>
                     <Text style={[styles.tabText, activeOverviewTab === 'yellows' && { color: activeTextColor }]}>TA</Text>
@@ -1239,7 +1268,7 @@ const MobileLiveApp = () => {
                     <Text style={[styles.tabText, activeOverviewTab === 'reds' && { color: activeTextColor }]}>TR</Text>
                   </Pressable>
                   <Pressable style={[styles.tab, activeOverviewTab === 'goalkeepers' && styles.tabActive, activeOverviewTab === 'goalkeepers' && themedTabActiveStyle]} onPress={() => setActiveOverviewTab('goalkeepers')}>
-                    <Text style={[styles.tabText, activeOverviewTab === 'goalkeepers' && { color: activeTextColor }]}>Arqueras</Text>
+                    <Text style={[styles.tabText, activeOverviewTab === 'goalkeepers' && { color: activeTextColor }]}>ARQ</Text>
                   </Pressable>
                 </View>
 
