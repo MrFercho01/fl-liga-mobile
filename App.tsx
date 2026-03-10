@@ -1160,7 +1160,7 @@ const MobileLiveApp = () => {
                         )}
                         <View style={styles.roundAwardMeta}>
                           <Text style={[styles.roundAwardName, { color: mvpTextColor }]}>{selectedRoundAward.roundBestPlayerName ?? 'Por definir'}</Text>
-                          <Text style={[styles.roundAwardTeam, { color: mvpSecondary }]}>{selectedRoundAward.roundBestPlayerTeamName ?? 'Equipo por definir'}</Text>
+                          <Text style={[styles.roundAwardTeam, { color: mvpTextColor }]}>{selectedRoundAward.roundBestPlayerTeamName ?? 'Equipo por definir'}</Text>
                         </View>
                       </View>
                     </View>
@@ -1452,7 +1452,7 @@ const MobileLiveApp = () => {
                   <Text style={[styles.mvpTitle, { color: mvpTextColor }]}>⭐ MVP del partido</Text>
                   <Text style={[styles.mvpName, { color: mvpTextColor }]}>{playedRecord.playerOfMatchName}</Text>
                   {playedRecord.playerOfMatchTeamName && (
-                    <Text style={[styles.mvpTeam, { color: mvpSecondary }]}>{playedRecord.playerOfMatchTeamName}</Text>
+                    <Text style={[styles.mvpTeam, { color: mvpTextColor }]}>{playedRecord.playerOfMatchTeamName}</Text>
                   )}
                 </View>
               )
@@ -2042,7 +2042,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pitchField: {
-    height: 260,
+    height: 360,
     borderRadius: 10,
     borderWidth: 2,
     borderColor: '#84cc16',
@@ -2097,17 +2097,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 6,
     right: 6,
-    top: 8,
-    bottom: '50%',
-    justifyContent: 'space-evenly',
+    top: 10,
+    bottom: '51%',
+    justifyContent: 'space-around',
   },
   pitchHalfBottom: {
     position: 'absolute',
     left: 6,
     right: 6,
-    top: '50%',
-    bottom: 8,
-    justifyContent: 'space-evenly',
+    top: '51%',
+    bottom: 10,
+    justifyContent: 'space-around',
   },
   pitchLine: {
     flexDirection: 'row',
@@ -2262,9 +2262,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   roundAwardTeam: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    marginTop: 2,
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 3,
   },
   footerBox: {
     position: 'absolute',
@@ -2401,9 +2402,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   mvpTeam: {
-    color: '#94a3b8',
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 3,
   },
   topLeaderRow: {
     flexDirection: 'row',
