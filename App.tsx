@@ -512,12 +512,16 @@ const MobileLiveApp = () => {
       .filter((match) => match.round === selectedRound)
       .slice()
       .sort((left, right) => {
-        const leftTime = getMatchDateTime(left)
-        const rightTime = getMatchDateTime(right)
+        const leftScheduled = left.scheduledAt ? new Date(left.scheduledAt).getTime() : Number.POSITIVE_INFINITY
+        const rightScheduled = right.scheduledAt ? new Date(right.scheduledAt).getTime() : Number.POSITIVE_INFINITY
+
+        const leftTime = Number.isFinite(leftScheduled) ? leftScheduled : Number.POSITIVE_INFINITY
+        const rightTime = Number.isFinite(rightScheduled) ? rightScheduled : Number.POSITIVE_INFINITY
+
         if (leftTime !== rightTime) return leftTime - rightTime
         return left.id.localeCompare(right.id, 'es')
       })
-  }, [getMatchDateTime, matches, selectedRound])
+  }, [matches, selectedRound])
 
   const selectedRoundAward = useMemo(() => {
     const roundAwards = fixtureQuery.data?.roundAwards ?? []
@@ -1496,40 +1500,6 @@ const MobileLiveApp = () => {
                     )
                   })()}
                 </View>
-              </View>
-            )}
-                                    {stats?.reds ? <View style={styles.pitchCardRed} /> : null}
-                                  </View>
-                                  <Text numberOfLines={1} style={styles.pitchPlayerName}>{player.name}</Text>
-                                  {stats && (stats.goals > 0 || stats.yellows > 0 || stats.reds > 0) && (
-                                    <Text style={styles.pitchPlayerBadges}>
-                                      {stats.goals > 0 ? `⚽${stats.goals} ` : ''}
-                                      {stats.yellows > 0 ? `TA${stats.yellows} ` : ''}
-                                      {stats.reds > 0 ? `TR${stats.reds}` : ''}
-                                    </Text>
-                                  )}
-                                </View>
-                              )
-                            })}
-                          </View>
-                        )
-                      })}
-                    </View>
-                  )}
-                </View>
-                <View style={styles.pitchInfoRow}>
-                  <Text style={styles.pitchTeam}>{teamsMap.get(selectedMatch.homeTeamId) ?? 'Local'}</Text>
-                  <Text style={styles.pitchScore}>{scoreLine}</Text>
-                  <Text style={styles.pitchTeam}>{teamsMap.get(selectedMatch.awayTeamId) ?? 'Visita'}</Text>
-                </View>
-                {selectedMatchIsLive && <Text style={styles.pitchStatus}>En vivo · {liveForSelected?.currentMinute ?? 0}'</Text>}
-                {!selectedMatchIsLive && selectedMatchIsPlayed && (
-                  <Text style={styles.pitchStatus}>Finalizado · {playedRecord?.finalMinute ?? 0}'</Text>
-                )}
-                {!selectedMatchIsLive && !selectedMatchIsPlayed && <Text style={styles.pitchStatus}>Programado</Text>}
-                {selectedMatchIsPlayed && pitchLines.home.length === 0 && pitchLines.away.length === 0 && (
-                  <Text style={styles.empty}>No hay alineaciones cargadas para dibujar la cancha.</Text>
-                )}
               </View>
             )}
 
