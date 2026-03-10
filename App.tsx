@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import * as Notifications from 'expo-notifications'
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +21,15 @@ import type { LiveEvent, LiveMatch, PublicClientSummary, ScheduledMatch } from '
 const queryClient = new QueryClient()
 const defaultFLLogo = require('./assets/icon.png')
 const webLogoUri = 'https://fl-liga-frontend.vercel.app/logo.png'
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+})
 
 type AppStep = 'company' | 'league' | 'matches' | 'match'
 type LeagueTab = 'matches' | 'overview'
@@ -308,6 +318,8 @@ const MobileLiveApp = () => {
   const [activeMatchTab, setActiveMatchTab] = useState<MatchTab>('pitch')
   const [activeOverviewTab, setActiveOverviewTab] = useState<OverviewTab>('standings')
   const [liveMatch, setLiveMatch] = useState<LiveMatch | null>(null)
+  const [followedMatchId, setFollowedMatchId] = useState('')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
 
   const clientsQuery = useQuery({
     queryKey: ['public-clients'],
@@ -362,6 +374,15 @@ const MobileLiveApp = () => {
 
     return () => clearInterval(timer)
   }, [fetchLive])
+
+  useEffect(() => {
+    void (async () => {
+      const permission = await Notifications.getPermissionsAsync()
+      if (permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
+        setNotificationsEnabled(true)
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     const firstClient = clientsQuery.data?.[0]
@@ -585,6 +606,64 @@ const MobileLiveApp = () => {
     () => matches.find((match) => match.id === selectedMatchId) ?? null,
     [matches, selectedMatchId],
   )
+
+  const followedMatch = useMemo(
+    () => matches.find((match) => match.id === followedMatchId) ?? null,
+    [matches, followedMatchId],
+  )
+
+  useEffect(() => {
+    if (followedMatchId && !followedMatch) {
+      setFollowedMatchId('')
+    }
+  }, [followedMatch, followedMatchId])
+
+  useEffect(() => {
+    if (!followedMatchId) return
+
+    void (async () => {
+      const permission = await Notifications.getPermissionsAsync()
+      const hasPermission = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+      if (hasPermission) {
+        setNotificationsEnabled(true)
+        return
+      }
+
+      const requested = await Notifications.requestPermissionsAsync()
+      const granted = requested.granted || requested.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+      setNotificationsEnabled(granted)
+    })()
+  }, [followedMatchId])
+
+  const notifiedGoalEventIds = useMemo(() => new Set<string>(), [])
+
+  useEffect(() => {
+    if (!notificationsEnabled || !followedMatch || !liveMatch) return
+
+    const sameOrder =
+      liveMatch.homeTeam.id === followedMatch.homeTeamId && liveMatch.awayTeam.id === followedMatch.awayTeamId
+    const swappedOrder =
+      liveMatch.homeTeam.id === followedMatch.awayTeamId && liveMatch.awayTeam.id === followedMatch.homeTeamId
+
+    if (!sameOrder && !swappedOrder) return
+
+    liveMatch.events.forEach((event) => {
+      if (event.type !== 'goal' && event.type !== 'penalty_goal') return
+      if (notifiedGoalEventIds.has(event.id)) return
+
+      notifiedGoalEventIds.add(event.id)
+
+      const teamName = event.teamId === liveMatch.homeTeam.id ? liveMatch.homeTeam.name : liveMatch.awayTeam.name
+      const minute = Number.isFinite(event.minute) ? `${event.minute}'` : event.clock
+      void Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Gol en ${liveMatch.homeTeam.name} vs ${liveMatch.awayTeam.name}`,
+          body: `${teamName} anotó al ${minute}`,
+        },
+        trigger: null,
+      })
+    })
+  }, [followedMatch, liveMatch, notificationsEnabled, notifiedGoalEventIds])
 
   const liveForSelected = useMemo(() => {
     if (!liveMatch || !selectedMatch) return null
@@ -1003,6 +1082,17 @@ const MobileLiveApp = () => {
       <View style={styles.container}>
         <View style={styles.topRow}>{step !== 'company' && <Pressable style={[styles.backButton, themedBackButtonStyle]} onPress={handleBack}><Text style={[styles.backButtonText, { color: activeTextColor }]}>← Volver</Text></Pressable>}</View>
 
+        {followedMatch && (
+          <View style={styles.followedMatchBar}>
+            <Text style={styles.followedMatchBarText} numberOfLines={1}>
+              Siguiendo: {teamsMap.get(followedMatch.homeTeamId) ?? 'Local'} vs {teamsMap.get(followedMatch.awayTeamId) ?? 'Visitante'}
+            </Text>
+            <Text style={styles.followedMatchBarHint}>
+              {notificationsEnabled ? 'Notificaciones de gol activas' : 'Activa permisos para notificaciones'}
+            </Text>
+          </View>
+        )}
+
         <View
           style={[
             styles.hero,
@@ -1250,6 +1340,17 @@ const MobileLiveApp = () => {
                           </Text>
                         )}
                         {item.venue ? <Text style={[styles.matchVenue, { color: secondaryTextColor }]}>{item.venue}</Text> : null}
+
+                        <View style={styles.matchActionsRow}>
+                          <Pressable
+                            onPress={() => setFollowedMatchId((current) => (current === item.id ? '' : item.id))}
+                            style={[styles.followMatchButton, followedMatchId === item.id && styles.followMatchButtonActive]}
+                          >
+                            <Text style={[styles.followMatchButtonText, followedMatchId === item.id && styles.followMatchButtonTextActive]}>
+                              {followedMatchId === item.id ? 'Siguiendo' : 'Seguir partido'}
+                            </Text>
+                          </Pressable>
+                        </View>
                       </Pressable>
                     )
                   }}
@@ -1434,6 +1535,16 @@ const MobileLiveApp = () => {
 
         {step === 'match' && selectedMatch && (
           <View style={styles.detailCard}>
+            <View style={styles.matchActionsRow}>
+              <Pressable
+                onPress={() => setFollowedMatchId((current) => (current === selectedMatch.id ? '' : selectedMatch.id))}
+                style={[styles.followMatchButton, followedMatchId === selectedMatch.id && styles.followMatchButtonActive]}
+              >
+                <Text style={[styles.followMatchButtonText, followedMatchId === selectedMatch.id && styles.followMatchButtonTextActive]}>
+                  {followedMatchId === selectedMatch.id ? 'Siguiendo partido' : 'Seguir partido'}
+                </Text>
+              </Pressable>
+            </View>
             <Text style={[styles.detailTitle, { color: accentColor }]}>
               {selectedMatchIsLive ? 'Partido en vivo' : selectedMatchIsPlayed ? 'Partido finalizado' : 'Partido programado'}
             </Text>
@@ -1654,6 +1765,25 @@ const styles = StyleSheet.create({
   },
   topRow: {
     minHeight: 24,
+  },
+  followedMatchBar: {
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    backgroundColor: 'rgba(22,163,74,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 2,
+  },
+  followedMatchBarText: {
+    color: '#14532d',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  followedMatchBarHint: {
+    color: '#166534',
+    fontSize: 10,
+    marginTop: 2,
   },
   backButton: {
     alignSelf: 'flex-start',
@@ -1879,6 +2009,31 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 11,
     marginTop: 2,
+  },
+  matchActionsRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  followMatchButton: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#f8fafc',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  followMatchButtonActive: {
+    borderColor: '#16a34a',
+    backgroundColor: 'rgba(22,163,74,0.12)',
+  },
+  followMatchButtonText: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  followMatchButtonTextActive: {
+    color: '#166534',
   },
   detailCard: {
     backgroundColor: '#ffffff',
