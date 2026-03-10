@@ -984,6 +984,8 @@ const MobileLiveApp = () => {
     }
 
     if (step === 'matches') {
+      setSelectedLeagueId('')
+      setSelectedCategoryId('')
       setStep('league')
       return
     }
@@ -1096,27 +1098,30 @@ const MobileLiveApp = () => {
 
             {activeLeagueTab === 'matches' ? (
               <>
-                <Text style={[styles.sectionTitle, themedSectionTitleStyle]}>Categorías</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-                  {categories.map((category) => (
-                    <Pressable
-                      key={category.id}
-                      style={[styles.chip, activeCategory?.id === category.id && styles.chipActive, activeCategory?.id === category.id && themedChipActiveStyle]}
-                      onPress={() => {
-                        setSelectedCategoryId(category.id)
-                        setSelectedRound(1)
-                        setSelectedMatchId('')
-                      }}
-                    >
+                <View style={styles.inlineSelectorRow}>
+                  <Text style={[styles.inlineSelectorLabel, themedSectionTitleStyle]}>Cat.</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+                    {categories.map((category) => (
+                      <Pressable
+                        key={category.id}
+                        style={[styles.chip, activeCategory?.id === category.id && styles.chipActive, activeCategory?.id === category.id && themedChipActiveStyle]}
+                        onPress={() => {
+                          setSelectedCategoryId(category.id)
+                          setSelectedRound(1)
+                          setSelectedMatchId('')
+                        }}
+                      >
                         <Text style={[styles.chipText, activeCategory?.id === category.id && { color: activeTextColor }]}>
-                        {category.name}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                          {category.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
 
-                <Text style={[styles.sectionTitle, themedSectionTitleStyle]}>Fechas</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+                <View style={styles.inlineSelectorRow}>
+                  <Text style={[styles.inlineSelectorLabel, themedSectionTitleStyle]}>Fecha</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
                   {fixtureQuery.data.fixture.rounds.map((round) => (
                     <Pressable
                       key={round.round}
@@ -1132,6 +1137,8 @@ const MobileLiveApp = () => {
                     </Pressable>
                   ))}
                 </ScrollView>
+
+                </View>
 
                 {selectedRoundAward && (() => {
                   const mvpTeam = selectedRoundAward.roundBestPlayerTeamId
@@ -1819,7 +1826,7 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
   },
   statusBadgeTextFinished: {
-    color: '#10b981',
+    color: '#047857',
   },
   statusBadgeTextPending: {
     color: '#3b82f6',
@@ -1846,8 +1853,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245,158,11,0.07)',
   },
   matchScoreBoxFinished: {
-    borderColor: 'rgba(16,185,129,0.3)',
-    backgroundColor: 'rgba(16,185,129,0.07)',
+    borderColor: 'rgba(4,120,87,0.35)',
+    backgroundColor: 'rgba(4,120,87,0.07)',
   },
   matchScoreLabel: {
     fontSize: 13,
@@ -1860,7 +1867,7 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
   },
   matchScoreLabelFinished: {
-    color: '#10b981',
+    color: '#047857',
   },
   matchMeta: {
     color: '#64748b',
@@ -1934,6 +1941,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 6,
     marginBottom: 6,
+  },
+  inlineSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 2,
+    gap: 8,
+  },
+  inlineSelectorLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    minWidth: 42,
+    flexShrink: 0,
+    marginBottom: 0,
+    marginTop: 0,
   },
   tableWrapper: {
     borderWidth: 1,
