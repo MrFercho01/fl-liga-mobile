@@ -507,21 +507,10 @@ const MobileLiveApp = () => {
     })
   }, [fixtureQuery.data, getMatchDateTime])
 
-  const matchesByRound = useMemo(() => {
-    return matches
-      .filter((match) => match.round === selectedRound)
-      .slice()
-      .sort((left, right) => {
-        const leftScheduled = left.scheduledAt ? new Date(left.scheduledAt).getTime() : Number.POSITIVE_INFINITY
-        const rightScheduled = right.scheduledAt ? new Date(right.scheduledAt).getTime() : Number.POSITIVE_INFINITY
-
-        const leftTime = Number.isFinite(leftScheduled) ? leftScheduled : Number.POSITIVE_INFINITY
-        const rightTime = Number.isFinite(rightScheduled) ? rightScheduled : Number.POSITIVE_INFINITY
-
-        if (leftTime !== rightTime) return leftTime - rightTime
-        return left.id.localeCompare(right.id, 'es')
-      })
-  }, [matches, selectedRound])
+  const matchesByRound = useMemo(
+    () => matches.filter((match) => match.round === selectedRound),
+    [matches, selectedRound],
+  )
 
   const selectedRoundAward = useMemo(() => {
     const roundAwards = fixtureQuery.data?.roundAwards ?? []
@@ -1152,16 +1141,35 @@ const MobileLiveApp = () => {
                     const awayTeam = teamsById.get(item.awayTeamId)
                     const homeName = homeTeam?.name ?? 'Local'
                     const awayName = awayTeam?.name ?? 'Visita'
-                    const record = fixtureQuery.data.playedMatches.find((entry) => entry.matchId === item.id)
-                    const playedAtLabel = formatScheduleLabel(record?.playedAt)
+
+                    // Detectar partido en vivo
+                    const isLiveDirect = Boolean(liveMatch && liveMatch.homeTeam.id === item.homeTeamId && liveMatch.awayTeam.id === item.awayTeamId)
+                    const isLiveReverse = Boolean(liveMatch && liveMatch.homeTeam.id === item.awayTeamId && liveMatch.awayTeam.id === item.homeTeamId)
+                    const hasLiveRef = isLiveDirect || isLiveReverse
+                    const liveElapsed = liveMatch?.timer?.elapsedSeconds ?? 0
+                    const isBreak = hasLiveRef && liveMatch?.status === 'live' && !(liveMatch?.timer?.running ?? false) && liveElapsed > 0
+                    const isLive = hasLiveRef && liveMatch?.status === 'live' && !isBreak
+                    const isLiveFinished = hasLiveRef && liveMatch?.status === 'finished'
+                    const isFinished = item.played || isLiveFinished
+
+                    // Marcador
+                    const histRecord = fixtureQuery.data.playedMatches.find((entry) => entry.matchId === item.id)
+                    const liveHomeGoals = isLiveDirect ? (liveMatch?.homeTeam.stats.goals ?? 0) : (liveMatch?.awayTeam.stats.goals ?? 0)
+                    const liveAwayGoals = isLiveDirect ? (liveMatch?.awayTeam.stats.goals ?? 0) : (liveMatch?.homeTeam.stats.goals ?? 0)
+                    const showScore = isFinished || isLive || isBreak
+                    const scoreHome = isFinished && !isLive ? (histRecord?.homeGoals ?? 0) : liveHomeGoals
+                    const scoreAway = isFinished && !isLive ? (histRecord?.awayGoals ?? 0) : liveAwayGoals
+
+                    // Hora programada (siempre desde scheduledAt, nunca playedAt)
                     const scheduledLabel = formatScheduleLabel(item.scheduledAt)
-                    const statusLabel = item.played
-                      ? playedAtLabel
-                        ? `Finalizado · ${playedAtLabel}`
-                        : 'Finalizado'
-                      : scheduledLabel
-                        ? `Programado · ${scheduledLabel}`
-                        : 'Pendiente'
+
+                    // Estado y estilos del badge
+                    const statusText = isLive ? 'En juego' : isBreak ? 'Descanso' : isFinished ? 'Finalizado' : 'Por jugar'
+                    const badgeStyle = isLive ? styles.statusBadgeLive : isBreak ? styles.statusBadgeBreak : isFinished ? styles.statusBadgeFinished : styles.statusBadgePending
+                    const badgeTextStyle = isLive ? styles.statusBadgeTextLive : isBreak ? styles.statusBadgeTextBreak : isFinished ? styles.statusBadgeTextFinished : styles.statusBadgeTextPending
+                    const scoreBoxStyle = isLive ? styles.matchScoreBoxLive : isBreak ? styles.matchScoreBoxBreak : styles.matchScoreBoxFinished
+                    const scoreLabelStyle = isLive ? styles.matchScoreLabelLive : isBreak ? styles.matchScoreLabelBreak : styles.matchScoreLabelFinished
+                    const scoreTitle = isLive ? 'Marcador' : isBreak ? 'Al descanso' : 'Resultado final'
 
                     return (
                       <Pressable
@@ -1172,22 +1180,39 @@ const MobileLiveApp = () => {
                           setStep('match')
                         }}
                       >
-                        <View style={styles.matchTeamsRow}>
-                          <View style={styles.matchTeam}>
-                            {homeTeam?.logoUrl && (
-                              <Image source={{ uri: homeTeam.logoUrl }} style={styles.matchTeamLogo} />
-                            )}
-                            <Text style={[styles.matchTeamName, { color: contrastTextColor }]}>{homeName}</Text>
+                        <View style={styles.matchCardTopRow}>
+                          <View style={styles.matchTeamsRow}>
+                            <View style={styles.matchTeam}>
+                              {homeTeam?.logoUrl && (
+                                <Image source={{ uri: homeTeam.logoUrl }} style={styles.matchTeamLogo} />
+                              )}
+                              <Text style={[styles.matchTeamName, { color: contrastTextColor }]} numberOfLines={1}>{homeName}</Text>
+                            </View>
+                            <Text style={[styles.matchVs, { color: secondaryTextColor }]}>vs</Text>
+                            <View style={[styles.matchTeam, { justifyContent: 'flex-end' }]}>
+                              <Text style={[styles.matchTeamName, { color: contrastTextColor, textAlign: 'right' }]} numberOfLines={1}>{awayName}</Text>
+                              {awayTeam?.logoUrl && (
+                                <Image source={{ uri: awayTeam.logoUrl }} style={styles.matchTeamLogo} />
+                              )}
+                            </View>
                           </View>
-                          <Text style={[styles.matchVs, { color: secondaryTextColor }]}>vs</Text>
-                          <View style={styles.matchTeam}>
-                            {awayTeam?.logoUrl && (
-                              <Image source={{ uri: awayTeam.logoUrl }} style={styles.matchTeamLogo} />
-                            )}
-                            <Text style={[styles.matchTeamName, { color: contrastTextColor }]}>{awayName}</Text>
+                          <View style={[styles.statusBadge, badgeStyle]}>
+                            {isLive && <View style={styles.livePulseDot} />}
+                            <Text style={[styles.statusBadgeText, badgeTextStyle]}>{statusText}</Text>
                           </View>
                         </View>
-                        <Text style={[styles.matchMeta, { color: secondaryTextColor }]}>{statusLabel}</Text>
+
+                        {showScore && (
+                          <View style={[styles.matchScoreBox, scoreBoxStyle]}>
+                            <Text style={[styles.matchScoreLabel, scoreLabelStyle]}>{scoreTitle}: {scoreHome} – {scoreAway}</Text>
+                          </View>
+                        )}
+
+                        {scheduledLabel && (
+                          <Text style={[styles.matchMeta, { color: secondaryTextColor }]}>
+                            {isFinished ? '🕐 ' : '📅 '}{scheduledLabel}
+                          </Text>
+                        )}
                         {item.venue ? <Text style={[styles.matchVenue, { color: secondaryTextColor }]}>{item.venue}</Text> : null}
                       </Pressable>
                     )
@@ -1720,6 +1745,93 @@ const styles = StyleSheet.create({
   matchVs: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  matchCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 2,
+  },
+  statusBadgeLive: {
+    borderColor: '#fca5a5',
+    backgroundColor: 'rgba(239,68,68,0.12)',
+  },
+  statusBadgeBreak: {
+    borderColor: '#fcd34d',
+    backgroundColor: 'rgba(245,158,11,0.12)',
+  },
+  statusBadgeFinished: {
+    borderColor: '#6ee7b7',
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  statusBadgePending: {
+    borderColor: '#93c5fd',
+    backgroundColor: 'rgba(59,130,246,0.08)',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusBadgeTextLive: {
+    color: '#ef4444',
+  },
+  statusBadgeTextBreak: {
+    color: '#f59e0b',
+  },
+  statusBadgeTextFinished: {
+    color: '#10b981',
+  },
+  statusBadgeTextPending: {
+    color: '#3b82f6',
+  },
+  livePulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
+  },
+  matchScoreBox: {
+    marginTop: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  matchScoreBoxLive: {
+    borderColor: 'rgba(239,68,68,0.4)',
+    backgroundColor: 'rgba(239,68,68,0.07)',
+  },
+  matchScoreBoxBreak: {
+    borderColor: 'rgba(245,158,11,0.4)',
+    backgroundColor: 'rgba(245,158,11,0.07)',
+  },
+  matchScoreBoxFinished: {
+    borderColor: 'rgba(16,185,129,0.3)',
+    backgroundColor: 'rgba(16,185,129,0.07)',
+  },
+  matchScoreLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  matchScoreLabelLive: {
+    color: '#ef4444',
+  },
+  matchScoreLabelBreak: {
+    color: '#f59e0b',
+  },
+  matchScoreLabelFinished: {
+    color: '#10b981',
   },
   matchMeta: {
     color: '#64748b',
