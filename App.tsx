@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as Notifications from 'expo-notifications'
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Image,
   Pressable,
@@ -79,13 +80,13 @@ interface GoalkeeperRanking {
 const createManualMatchId = (round: number, homeTeamId: string, awayTeamId: string) =>
   `manual__${round}__${homeTeamId}__${awayTeamId}`
 
-function HighlightVideoCard({ name, url }: { name: string; url: string }) {
+function HighlightVideoCard({ name, url, width }: { name: string; url: string; width: number }) {
   const player = useVideoPlayer(url, (instance) => {
     instance.loop = false
   })
 
   return (
-    <View style={styles.videoRow}>
+    <View style={[styles.videoRow, { width }]}>
       <Text style={styles.videoName}>{name}</Text>
       <VideoView
         player={player}
@@ -328,6 +329,9 @@ const formatScheduleLabel = (isoDate?: string) => {
 }
 
 const MobileLiveApp = () => {
+  const screenWidth = Dimensions.get('window').width
+  const highlightCardWidth = Math.max(260, Math.min(360, screenWidth - 56))
+
   const [step, setStep] = useState<AppStep>('company')
   const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedLeagueId, setSelectedLeagueId] = useState('')
@@ -1737,13 +1741,16 @@ const MobileLiveApp = () => {
                   <Text style={styles.empty}>Aún no hay videos publicados para este partido.</Text>
                 ) : (
                   <ScrollView
-                    style={styles.highlightVideosScroll}
+                    horizontal
+                    style={styles.highlightVideosCarousel}
                     contentContainerStyle={styles.highlightVideosScrollContent}
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator
+                    showsHorizontalScrollIndicator
+                    decelerationRate="fast"
+                    snapToAlignment="start"
+                    snapToInterval={highlightCardWidth + 12}
                   >
                     {highlightVideos.map((video) => (
-                      <HighlightVideoCard key={video.id} name={video.name} url={video.url} />
+                      <HighlightVideoCard key={video.id} name={video.name} url={video.url} width={highlightCardWidth} />
                     ))}
                   </ScrollView>
                 )}
@@ -2201,11 +2208,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: '#0f172a',
   },
-  highlightVideosScroll: {
-    maxHeight: 460,
+  highlightVideosCarousel: {
+    marginTop: 2,
   },
   highlightVideosScrollContent: {
-    paddingBottom: 6,
+    gap: 12,
+    paddingRight: 6,
   },
   videoName: {
     color: '#f8fafc',
