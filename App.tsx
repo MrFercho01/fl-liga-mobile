@@ -1740,7 +1740,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   matchList: {
-    maxHeight: 230,
+    flex: 1,
+    minHeight: 0,
   },
   matchCard: {
     backgroundColor: '#ffffff',
