@@ -67,13 +67,19 @@ export interface LiveMatch {
   homeTeam: {
     id: string
     name: string
-    players: Array<{ id: string; name: string }>
+    players: Array<{ id: string; name: string; number?: number; position?: string; photoUrl?: string }>
+    starters: string[]
+    substitutes: string[]
+    formationKey?: string
     stats: { goals: number }
   }
   awayTeam: {
     id: string
     name: string
-    players: Array<{ id: string; name: string }>
+    players: Array<{ id: string; name: string; number?: number; position?: string; photoUrl?: string }>
+    starters: string[]
+    substitutes: string[]
+    formationKey?: string
     stats: { goals: number }
   }
   timer: {

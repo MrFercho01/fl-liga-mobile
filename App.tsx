@@ -813,17 +813,41 @@ const MobileLiveApp = () => {
 
   const highlightVideos = playedRecord?.highlightVideos ?? []
   const selectedMatchIsPlayed = Boolean(selectedMatch && selectedMatch.played)
-  const selectedMatchIsLive = Boolean(liveForSelected)
+  const selectedMatchHasLiveSnapshot = Boolean(liveForSelected)
+  const selectedMatchIsLive = liveForSelected?.status === 'live'
   const scoreLine = selectedMatchIsLive
     ? `${liveForSelected?.homeTeam.stats.goals ?? 0} - ${liveForSelected?.awayTeam.stats.goals ?? 0}`
     : selectedMatchIsPlayed
       ? `${playedRecord?.homeGoals ?? 0} - ${playedRecord?.awayGoals ?? 0}`
       : '0 - 0'
 
-  const playedEventStats = useMemo(() => {
-    if (!playedRecord) return new Map<string, { goals: number; yellows: number; reds: number }>()
-
+  const selectedEventStats = useMemo(() => {
     const map = new Map<string, { goals: number; yellows: number; reds: number }>()
+
+    if (selectedMatchHasLiveSnapshot && liveForSelected) {
+      liveForSelected.events.forEach((event) => {
+        if (!event.playerId) return
+
+        const playerName =
+          liveForSelected.homeTeam.players.find((player) => player.id === event.playerId)?.name ??
+          liveForSelected.awayTeam.players.find((player) => player.id === event.playerId)?.name
+
+        if (!playerName) return
+        const key = normalizePlayerKey(playerName)
+        const current = map.get(key) ?? { goals: 0, yellows: 0, reds: 0 }
+
+        if (event.type === 'goal' || event.type === 'penalty_goal') current.goals += 1
+        if (event.type === 'yellow' || event.type === 'double_yellow') current.yellows += 1
+        if (event.type === 'red') current.reds += 1
+
+        map.set(key, current)
+      })
+
+      return map
+    }
+
+    if (!playedRecord) return map
+
     playedRecord.events.forEach((event) => {
       if (!event.playerName) return
       const key = normalizePlayerKey(event.playerName)
@@ -837,32 +861,99 @@ const MobileLiveApp = () => {
     })
 
     return map
-  }, [playedRecord])
+  }, [liveForSelected, playedRecord, selectedMatchHasLiveSnapshot])
 
-  const pitchLines = useMemo(() => {
-    if (!selectedMatchIsPlayed || !playedRecord) return { home: [] as Array<Array<{ id: string; name: string; number: number }>>, away: [] as Array<Array<{ id: string; name: string; number: number }>> }
+  const lineupData = useMemo(() => {
+    if (!selectedMatch) {
+      return {
+        home: [] as Array<Array<{ id: string; name: string; number: number }>>,
+        away: [] as Array<Array<{ id: string; name: string; number: number }>>,
+        homeSubstitutes: [] as Array<{ id: string; name: string; number: number }>,
+        awaySubstitutes: [] as Array<{ id: string; name: string; number: number }>,
+      }
+    }
 
     const homeTeam = teamsById.get(selectedMatch?.homeTeamId ?? '')
     const awayTeam = teamsById.get(selectedMatch?.awayTeamId ?? '')
-    if (!homeTeam || !awayTeam) return { home: [], away: [] }
+    if (!homeTeam || !awayTeam) {
+      return {
+        home: [] as Array<Array<{ id: string; name: string; number: number }>>,
+        away: [] as Array<Array<{ id: string; name: string; number: number }>>,
+        homeSubstitutes: [] as Array<{ id: string; name: string; number: number }>,
+        awaySubstitutes: [] as Array<{ id: string; name: string; number: number }>,
+      }
+    }
 
-    const resolveLineupPlayers = (
+    const resolveFromIds = (
       teamPlayers: typeof homeTeam.players,
-      lineup?: { starters: string[]; substitutes: string[]; formationKey?: string },
+      starterIds?: string[],
+      substituteIds?: string[],
+      formationKey?: string,
     ) => {
-      const starters = (lineup?.starters ?? [])
+      const starters = (starterIds ?? [])
         .map((playerId) => teamPlayers.find((player) => player.id === playerId))
         .filter((player): player is (typeof teamPlayers)[number] => Boolean(player))
 
-      const basePlayers = starters.length > 0 ? starters : teamPlayers.slice(0, 7)
-      return buildVisualLines(basePlayers, lineup?.formationKey)
+      const starterBase = starters.length > 0 ? starters : teamPlayers.slice(0, Math.min(teamPlayers.length, 11))
+      const starterIdsSet = new Set(starterBase.map((player) => player.id))
+
+      const substitutes = (substituteIds ?? [])
+        .map((playerId) => teamPlayers.find((player) => player.id === playerId))
+        .filter((player): player is (typeof teamPlayers)[number] => Boolean(player))
+
+      const substituteBase =
+        substitutes.length > 0
+          ? substitutes
+          : teamPlayers.filter((player) => !starterIdsSet.has(player.id)).slice(0, 14)
+
+      return {
+        lines: buildVisualLines(starterBase, formationKey),
+        substitutes: substituteBase,
+      }
     }
 
-    return {
-      home: resolveLineupPlayers(homeTeam.players, playedRecord.homeLineup),
-      away: resolveLineupPlayers(awayTeam.players, playedRecord.awayLineup),
+    if (selectedMatchHasLiveSnapshot && liveForSelected) {
+      const homeFromLive = resolveFromIds(
+        homeTeam.players,
+        liveForSelected.homeTeam.starters,
+        liveForSelected.homeTeam.substitutes,
+        liveForSelected.homeTeam.formationKey,
+      )
+      const awayFromLive = resolveFromIds(
+        awayTeam.players,
+        liveForSelected.awayTeam.starters,
+        liveForSelected.awayTeam.substitutes,
+        liveForSelected.awayTeam.formationKey,
+      )
+
+      return {
+        home: homeFromLive.lines,
+        away: awayFromLive.lines,
+        homeSubstitutes: homeFromLive.substitutes,
+        awaySubstitutes: awayFromLive.substitutes,
+      }
     }
-  }, [playedRecord, selectedMatch?.awayTeamId, selectedMatch?.homeTeamId, selectedMatchIsPlayed, teamsById])
+
+    const homeFromPlayed = resolveFromIds(
+      homeTeam.players,
+      playedRecord?.homeLineup?.starters,
+      playedRecord?.homeLineup?.substitutes,
+      playedRecord?.homeLineup?.formationKey,
+    )
+    const awayFromPlayed = resolveFromIds(
+      awayTeam.players,
+      playedRecord?.awayLineup?.starters,
+      playedRecord?.awayLineup?.substitutes,
+      playedRecord?.awayLineup?.formationKey,
+    )
+
+    return {
+      home: homeFromPlayed.lines,
+      away: awayFromPlayed.lines,
+      homeSubstitutes: homeFromPlayed.substitutes,
+      awaySubstitutes: awayFromPlayed.substitutes,
+    }
+  }, [liveForSelected, playedRecord, selectedMatch, selectedMatchHasLiveSnapshot, teamsById])
 
   const playerRankings = useMemo(() => {
     const fixture = fixtureQuery.data
@@ -1675,13 +1766,13 @@ const MobileLiveApp = () => {
 
                     return (
                       <>
-                        {pitchLines.away.length > 0 && (
+                        {lineupData.away.length > 0 && (
                           <View style={styles.pitchHalfTop}>
-                            {pitchLines.away.map((line, lineIndex) => {
+                            {lineupData.away.map((line, lineIndex) => {
                               return (
                                 <View key={`away-line-${lineIndex}`} style={styles.pitchLine}>
                                   {line.map((player) => {
-                                    const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                                    const stats = selectedEventStats.get(normalizePlayerKey(player.name))
                                     return (
                                       <View key={player.id} style={styles.pitchPlayerWrap}>
                                         <View style={[styles.pitchPlayerAway, { backgroundColor: teamColors.away }]}>
@@ -1706,13 +1797,13 @@ const MobileLiveApp = () => {
                           </View>
                         )}
 
-                        {pitchLines.home.length > 0 && (
+                        {lineupData.home.length > 0 && (
                           <View style={styles.pitchHalfBottom}>
-                            {pitchLines.home.map((line, lineIndex) => {
+                            {lineupData.home.map((line, lineIndex) => {
                               return (
                                 <View key={`home-line-${lineIndex}`} style={styles.pitchLine}>
                                   {line.map((player) => {
-                                    const stats = playedEventStats.get(normalizePlayerKey(player.name))
+                                    const stats = selectedEventStats.get(normalizePlayerKey(player.name))
                                     return (
                                       <View key={player.id} style={styles.pitchPlayerWrap}>
                                         <View style={[styles.pitchPlayerHome, { backgroundColor: teamColors.home }]}>
@@ -1739,6 +1830,40 @@ const MobileLiveApp = () => {
                       </>
                     )
                   })()}
+                </View>
+
+                <View style={styles.benchesRow}>
+                  <View style={styles.benchColumn}>
+                    <Text style={styles.benchTitle}>Suplentes · {teamsMap.get(selectedMatch.homeTeamId)}</Text>
+                    {lineupData.homeSubstitutes.length === 0 ? (
+                      <Text style={styles.empty}>Sin suplentes cargadas.</Text>
+                    ) : (
+                      <ScrollView style={styles.benchScroll} nestedScrollEnabled>
+                        {lineupData.homeSubstitutes.map((player) => (
+                          <View key={`home-sub-${player.id}`} style={styles.benchRow}>
+                            <Text style={styles.benchNumber}>#{player.number}</Text>
+                            <Text numberOfLines={1} style={styles.benchName}>{player.name}</Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+
+                  <View style={styles.benchColumn}>
+                    <Text style={styles.benchTitle}>Suplentes · {teamsMap.get(selectedMatch.awayTeamId)}</Text>
+                    {lineupData.awaySubstitutes.length === 0 ? (
+                      <Text style={styles.empty}>Sin suplentes cargadas.</Text>
+                    ) : (
+                      <ScrollView style={styles.benchScroll} nestedScrollEnabled>
+                        {lineupData.awaySubstitutes.map((player) => (
+                          <View key={`away-sub-${player.id}`} style={styles.benchRow}>
+                            <Text style={styles.benchNumber}>#{player.number}</Text>
+                            <Text numberOfLines={1} style={styles.benchName}>{player.name}</Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
                 </View>
               </View>
             )}
@@ -2428,6 +2553,48 @@ const styles = StyleSheet.create({
     fontSize: 8,
     marginTop: 1,
     textAlign: 'center',
+  },
+  benchesRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  benchColumn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 8,
+    minHeight: 110,
+  },
+  benchTitle: {
+    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  benchScroll: {
+    maxHeight: 126,
+  },
+  benchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 3,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#cbd5e1',
+  },
+  benchNumber: {
+    width: 34,
+    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  benchName: {
+    flex: 1,
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '600',
   },
   pitchInfoRow: {
     flexDirection: 'row',
