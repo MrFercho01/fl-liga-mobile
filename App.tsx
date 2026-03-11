@@ -528,8 +528,11 @@ const MobileLiveApp = () => {
       const parsed = parseMatchIdentity(scheduleEntry.matchId, scheduleEntry.round)
       if (!parsed) return
 
+      const key = buildRoundTeamsKey(scheduleEntry.round, parsed.homeTeamId, parsed.awayTeamId)
+      if (seenKeys.has(key)) return
+      seenKeys.add(key)
+
       const isPlayed = playedMatchIdsSet.has(scheduleEntry.matchId)
-      seenKeys.add(buildRoundTeamsKey(scheduleEntry.round, parsed.homeTeamId, parsed.awayTeamId))
 
       result.push({
         id: scheduleEntry.matchId,
