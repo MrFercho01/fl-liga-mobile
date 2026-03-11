@@ -1752,7 +1752,7 @@ const MobileLiveApp = () => {
             </View>
 
             {activeMatchTab === 'pitch' && (
-              <View style={styles.pitchCard}>
+              <ScrollView contentContainerStyle={styles.pitchCard} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                 <View style={styles.pitchField}>
                   <View style={styles.pitchHalfLine} />
                   <View style={styles.pitchCenterCircle} />
@@ -1799,7 +1799,7 @@ const MobileLiveApp = () => {
 
                         {lineupData.home.length > 0 && (
                           <View style={styles.pitchHalfBottom}>
-                            {lineupData.home.map((line, lineIndex) => {
+                            {[...lineupData.home].reverse().map((line, lineIndex) => {
                               return (
                                 <View key={`home-line-${lineIndex}`} style={styles.pitchLine}>
                                   {line.map((player) => {
@@ -1865,7 +1865,7 @@ const MobileLiveApp = () => {
                     )}
                   </View>
                 </View>
-              </View>
+              </ScrollView>
             )}
 
             {activeMatchTab === 'events' && (
