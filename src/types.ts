@@ -111,6 +111,7 @@ export interface PublicFixturePayload {
     round: number
     scheduledAt: string
     venue?: string
+    status?: 'scheduled' | 'postponed'
   }>
   playedMatchIds: string[]
   playedMatches: Array<{
@@ -168,4 +169,5 @@ export interface ScheduledMatch {
   played: boolean
   scheduledAt?: string
   venue?: string
+  status?: 'scheduled' | 'postponed'
 }
