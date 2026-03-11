@@ -151,6 +151,15 @@ const normalizePlayerKey = (value: string) =>
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\bbanco\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const buildTeamNameAliases = (value: string) => {
+  const normalized = normalizePlayerKey(value)
+  const withoutBanco = normalized.replace(/\bbanco\b/g, ' ').replace(/\s+/g, ' ').trim()
+  return Array.from(new Set([normalized, withoutBanco].filter(Boolean)))
+}
 
 const parseFormationLines = (formationKey?: string) => {
   if (!formationKey) return null
@@ -489,9 +498,14 @@ const MobileLiveApp = () => {
 
     const playedMatchIdsSet = new Set(fixture.playedMatchIds)
     const result: ScheduledMatch[] = []
-    const teamsByNormalizedName = new Map(
-      fixture.teams.map((team) => [normalizePlayerKey(team.name), team.id]),
-    )
+    const teamsByNormalizedName = new Map<string, string>()
+    fixture.teams.forEach((team) => {
+      buildTeamNameAliases(team.name).forEach((alias) => {
+        if (!teamsByNormalizedName.has(alias)) {
+          teamsByNormalizedName.set(alias, team.id)
+        }
+      })
+    })
     const seenKeys = new Set<string>()
 
     // Mapas de lookup para la hora programada: por matchId y por clave round:home:away
@@ -525,6 +539,7 @@ const MobileLiveApp = () => {
         played: isPlayed,
         scheduledAt: scheduleEntry.scheduledAt,
         venue: scheduleEntry.venue,
+        status: scheduleEntry.status,
       })
     })
 
@@ -551,8 +566,8 @@ const MobileLiveApp = () => {
         return
       }
 
-      const homeTeamId = teamsByNormalizedName.get(normalizePlayerKey(played.homeTeamName))
-      const awayTeamId = teamsByNormalizedName.get(normalizePlayerKey(played.awayTeamName))
+      const homeTeamId = buildTeamNameAliases(played.homeTeamName).map((alias) => teamsByNormalizedName.get(alias)).find(Boolean)
+      const awayTeamId = buildTeamNameAliases(played.awayTeamName).map((alias) => teamsByNormalizedName.get(alias)).find(Boolean)
       if (!homeTeamId || !awayTeamId) return
 
       const key = buildRoundTeamsKey(played.round, homeTeamId, awayTeamId)
@@ -1314,9 +1329,26 @@ const MobileLiveApp = () => {
                     const scheduledLabel = formatScheduleLabel(item.scheduledAt)
 
                     // Estado y estilos del badge
-                    const statusText = isLive ? 'En juego' : isBreak ? 'Descanso' : isFinished ? 'Finalizado' : 'Por jugar'
-                    const badgeStyle = isLive ? styles.statusBadgeLive : isBreak ? styles.statusBadgeBreak : isFinished ? styles.statusBadgeFinished : styles.statusBadgePending
-                    const badgeTextStyle = isLive ? styles.statusBadgeTextLive : isBreak ? styles.statusBadgeTextBreak : isFinished ? styles.statusBadgeTextFinished : styles.statusBadgeTextPending
+                    const isPostponed = !isLive && !isBreak && !isFinished && item.status === 'postponed'
+                    const statusText = isLive ? 'En juego' : isBreak ? 'Descanso' : isFinished ? 'Finalizado' : isPostponed ? 'Postergado' : 'Por jugar'
+                    const badgeStyle = isLive
+                      ? styles.statusBadgeLive
+                      : isBreak
+                        ? styles.statusBadgeBreak
+                        : isFinished
+                          ? styles.statusBadgeFinished
+                          : isPostponed
+                            ? styles.statusBadgePostponed
+                            : styles.statusBadgePending
+                    const badgeTextStyle = isLive
+                      ? styles.statusBadgeTextLive
+                      : isBreak
+                        ? styles.statusBadgeTextBreak
+                        : isFinished
+                          ? styles.statusBadgeTextFinished
+                          : isPostponed
+                            ? styles.statusBadgeTextPostponed
+                            : styles.statusBadgeTextPending
                     const scoreBoxStyle = isLive ? styles.matchScoreBoxLive : isBreak ? styles.matchScoreBoxBreak : styles.matchScoreBoxFinished
                     const scoreLabelStyle = isLive ? styles.matchScoreLabelLive : isBreak ? styles.matchScoreLabelBreak : styles.matchScoreLabelFinished
                     const scoreTitle = isLive ? 'Marcador' : isBreak ? 'Al descanso' : 'Resultado final'
@@ -1975,6 +2007,10 @@ const styles = StyleSheet.create({
     borderColor: '#93c5fd',
     backgroundColor: 'rgba(59,130,246,0.08)',
   },
+  statusBadgePostponed: {
+    borderColor: '#fdba74',
+    backgroundColor: 'rgba(249,115,22,0.12)',
+  },
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '700',
@@ -1990,6 +2026,9 @@ const styles = StyleSheet.create({
   },
   statusBadgeTextPending: {
     color: '#3b82f6',
+  },
+  statusBadgeTextPostponed: {
+    color: '#ea580c',
   },
   livePulseDot: {
     width: 7,
