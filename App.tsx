@@ -1693,7 +1693,11 @@ const MobileLiveApp = () => {
         )}
 
         {step === 'match' && selectedMatch && (
-          <View style={styles.detailCard}>
+          <ScrollView
+            style={styles.detailCard}
+            contentContainerStyle={styles.detailCardContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.matchActionsRow}>
               <Pressable
                 onPress={() => setFollowedMatchId((current) => (current === selectedMatch.id ? '' : selectedMatch.id))}
@@ -1752,7 +1756,7 @@ const MobileLiveApp = () => {
             </View>
 
             {activeMatchTab === 'pitch' && (
-              <ScrollView contentContainerStyle={styles.pitchCard} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+              <View style={styles.pitchCard}>
                 <View style={styles.pitchField}>
                   <View style={styles.pitchHalfLine} />
                   <View style={styles.pitchCenterCircle} />
@@ -1838,14 +1842,14 @@ const MobileLiveApp = () => {
                     {lineupData.homeSubstitutes.length === 0 ? (
                       <Text style={styles.empty}>Sin suplentes cargadas.</Text>
                     ) : (
-                      <ScrollView style={styles.benchScroll} nestedScrollEnabled>
+                      <View>
                         {lineupData.homeSubstitutes.map((player) => (
                           <View key={`home-sub-${player.id}`} style={styles.benchRow}>
                             <Text style={styles.benchNumber}>#{player.number}</Text>
                             <Text numberOfLines={1} style={styles.benchName}>{player.name}</Text>
                           </View>
                         ))}
-                      </ScrollView>
+                      </View>
                     )}
                   </View>
 
@@ -1854,18 +1858,18 @@ const MobileLiveApp = () => {
                     {lineupData.awaySubstitutes.length === 0 ? (
                       <Text style={styles.empty}>Sin suplentes cargadas.</Text>
                     ) : (
-                      <ScrollView style={styles.benchScroll} nestedScrollEnabled>
+                      <View>
                         {lineupData.awaySubstitutes.map((player) => (
                           <View key={`away-sub-${player.id}`} style={styles.benchRow}>
                             <Text style={styles.benchNumber}>#{player.number}</Text>
                             <Text numberOfLines={1} style={styles.benchName}>{player.name}</Text>
                           </View>
                         ))}
-                      </ScrollView>
+                      </View>
                     )}
                   </View>
                 </View>
-              </ScrollView>
+              </View>
             )}
 
             {activeMatchTab === 'events' && (
@@ -1874,7 +1878,7 @@ const MobileLiveApp = () => {
                 {goalsTable.length === 0 ? (
                   <Text style={styles.empty}>Aún no hay goles.</Text>
                 ) : (
-                  <ScrollView style={styles.tableScroll} nestedScrollEnabled>
+                  <View>
                     <View style={styles.tableWrapper}>
                       {goalsTable.map((row) => (
                         <View key={row.id} style={styles.tableRow}>
@@ -1885,7 +1889,7 @@ const MobileLiveApp = () => {
                         </View>
                       ))}
                     </View>
-                  </ScrollView>
+                  </View>
                 )}
 
                 <Text style={styles.sectionTitle}>Eventos del partido</Text>
@@ -1893,11 +1897,11 @@ const MobileLiveApp = () => {
                   {timelineEvents.length === 0 ? (
                     <Text style={styles.empty}>Sin eventos todavía.</Text>
                   ) : (
-                    <ScrollView style={styles.eventsScroll} nestedScrollEnabled>
+                    <View>
                       {timelineEvents.map((event) => (
                         <Text key={event.id} style={styles.eventItem}>{event.text}</Text>
                       ))}
-                    </ScrollView>
+                    </View>
                   )}
                 </View>
               </>
@@ -1925,7 +1929,7 @@ const MobileLiveApp = () => {
                 )}
               </>
             )}
-          </View>
+          </ScrollView>
         )}
 
         <View style={styles.footerBox}>
@@ -2241,12 +2245,17 @@ const styles = StyleSheet.create({
     color: '#166534',
   },
   detailCard: {
+    flex: 1,
     backgroundColor: '#ffffff',
     borderColor: '#e2e8f0',
     borderWidth: 1,
     borderRadius: 14,
-    padding: 12,
     marginBottom: 10,
+  },
+  detailCardContent: {
+    padding: 12,
+    gap: 10,
+    paddingBottom: 30,
   },
   detailTitle: {
     color: '#64748b',
