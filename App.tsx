@@ -17,14 +17,12 @@ import {
   View,
 } from 'react-native'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { ANDROID_APK_URL } from './src/config'
 import { useLiveSocket } from './src/hooks/useLiveSocket'
 import { mobileApi } from './src/services/api'
 import type { LiveEvent, LiveMatch, PublicClientSummary, ScheduledMatch } from './src/types'
 
 const queryClient = new QueryClient()
 const defaultFLLogo = require('./assets/icon.png')
-const androidDownloadBadge = require('./assets/android-icon-foreground.png')
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -88,6 +86,36 @@ function HighlightVideoCard({ name, url, width }: { name: string; url: string; w
     instance.loop = false
   })
 
+  const handleDownloadVideo = useCallback(async () => {
+    const normalizedUrl = url.trim()
+    if (!normalizedUrl) {
+      Alert.alert('Sin enlace de video', 'Este highlight no tiene un enlace válido para descargar.')
+      return
+    }
+
+    const preferredUrl = normalizedUrl.includes('?')
+      ? `${normalizedUrl}&download=1`
+      : `${normalizedUrl}?download=1`
+
+    try {
+      const preferredSupported = await Linking.canOpenURL(preferredUrl)
+      if (preferredSupported) {
+        await Linking.openURL(preferredUrl)
+        return
+      }
+
+      const fallbackSupported = await Linking.canOpenURL(normalizedUrl)
+      if (!fallbackSupported) {
+        Alert.alert('No se pudo abrir el video', 'Verifica que el enlace del highlight esté publicado correctamente.')
+        return
+      }
+
+      await Linking.openURL(normalizedUrl)
+    } catch {
+      Alert.alert('Error al descargar', 'No fue posible abrir la descarga del video highlight.')
+    }
+  }, [url])
+
   return (
     <View style={[styles.videoRow, { width }]}>
       <Text style={styles.videoName}>{name}</Text>
@@ -99,6 +127,9 @@ function HighlightVideoCard({ name, url, width }: { name: string; url: string; w
         allowsPictureInPicture
         contentFit="contain"
       />
+      <Pressable style={styles.videoDownloadButton} onPress={() => void handleDownloadVideo()}>
+        <Text style={styles.videoDownloadButtonText}>Descargar video</Text>
+      </Pressable>
     </View>
   )
 }
@@ -1195,30 +1226,8 @@ const MobileLiveApp = () => {
   const leagueBackgroundImageUrl = fixtureQuery.data?.league.backgroundImageUrl ?? selectedLeague?.backgroundImageUrl
   const leagueLogoUrl = fixtureQuery.data?.league.logoUrl ?? selectedLeague?.logoUrl
   const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : defaultFLLogo
-
-  const handleAndroidDownload = useCallback(async () => {
-    if (!ANDROID_APK_URL) {
-      Alert.alert(
-        'APK no publicado aún',
-        'La app ya tiene el acceso listo, pero todavía falta subir el APK a una URL pública y configurar EXPO_PUBLIC_ANDROID_APK_URL.',
-      )
-      return
-    }
-
-    try {
-      const supported = await Linking.canOpenURL(ANDROID_APK_URL)
-      if (!supported) {
-        Alert.alert('No se pudo abrir la descarga', 'Verifica la URL pública configurada para el APK Android.')
-        return
-      }
-
-      await Linking.openURL(ANDROID_APK_URL)
-    } catch {
-      Alert.alert('Error de descarga', 'No fue posible abrir el enlace de descarga del APK Android.')
-    }
-  }, [])
   const year = new Date().getFullYear()
-  const leagueName = fixtureQuery.data?.league.name ?? selectedLeague?.name ?? 'FL Liga Mobile'
+  const leagueName = fixtureQuery.data?.league.name ?? selectedLeague?.name ?? 'FL League'
   const leagueSubtitle = selectedClient?.organizationName
     ? `${selectedClient.organizationName} · ${activeCategory?.name ?? 'Categorías'}`
     : `${selectedClient?.name ?? 'Multicliente'} · ${activeCategory?.name ?? 'Categorías'}`
@@ -1271,7 +1280,7 @@ const MobileLiveApp = () => {
         >
           {leagueBackgroundImageUrl && <Image source={{ uri: leagueBackgroundImageUrl }} style={styles.heroBackgroundImage} />}
           <View style={styles.heroTextBox}>
-            <Text style={[styles.heroOverline, { color: accentColor }]}>FL Liga · Mobile Live</Text>
+            <Text style={[styles.heroOverline, { color: accentColor }]}>FL League · Mobile Live</Text>
             <Text style={[styles.title, themedHeroTitleStyle]}>{leagueName}</Text>
             <Text style={[styles.subtitle, themedHeroSubtitleStyle]}>{leagueSubtitle}</Text>
           </View>
@@ -1283,17 +1292,6 @@ const MobileLiveApp = () => {
 
         {step === 'company' && (
           <>
-            <Pressable style={styles.androidDownloadCard} onPress={() => void handleAndroidDownload()}>
-              <View style={styles.androidDownloadIconWrap}>
-                <Image source={androidDownloadBadge} style={styles.androidDownloadIcon} />
-              </View>
-              <View style={styles.androidDownloadBody}>
-                <Text style={styles.androidDownloadTitle}>Descargar app Android (APK)</Text>
-              </View>
-              <View style={styles.androidDownloadAction}>
-                <Text style={styles.androidDownloadActionText}>{ANDROID_APK_URL ? 'Descargar' : 'Próximamente'}</Text>
-              </View>
-            </Pressable>
             <Text style={[styles.sectionTitle, themedSectionTitleStyle]}>1) Elige la empresa</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
               {(clientsQuery.data ?? []).map((client) => (
@@ -2086,58 +2084,6 @@ const styles = StyleSheet.create({
   chipsRow: {
     maxHeight: 40,
   },
-  androidDownloadCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#34d399',
-    backgroundColor: '#064e3b',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    shadowColor: '#22c55e',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  androidDownloadIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#dcfce7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#86efac',
-  },
-  androidDownloadIcon: {
-    width: 18,
-    height: 18,
-    resizeMode: 'contain',
-  },
-  androidDownloadBody: {
-    flex: 1,
-  },
-  androidDownloadTitle: {
-    color: '#f0fdf4',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  androidDownloadAction: {
-    borderRadius: 999,
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignSelf: 'flex-start',
-  },
-  androidDownloadActionText: {
-    color: '#052e16',
-    fontSize: 10,
-    fontWeight: '700',
-  },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -2499,6 +2445,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#020617',
     overflow: 'hidden',
+  },
+  videoDownloadButton: {
+    marginTop: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#22d3ee',
+    backgroundColor: 'rgba(34,211,238,0.16)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  videoDownloadButtonText: {
+    color: '#67e8f9',
+    fontSize: 11,
+    fontWeight: '700',
   },
   videoUrl: {
     color: '#7dd3fc',
