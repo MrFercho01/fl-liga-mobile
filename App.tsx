@@ -82,9 +82,21 @@ const createManualMatchId = (round: number, homeTeamId: string, awayTeamId: stri
   `manual__${round}__${homeTeamId}__${awayTeamId}`
 
 function HighlightVideoCard({ name, url, width }: { name: string; url: string; width: number }) {
+  const [isPlaying, setIsPlaying] = useState(false)
   const player = useVideoPlayer(url, (instance) => {
     instance.loop = false
   })
+
+  useEffect(() => {
+    const sub = player.addListener('playingChange', (event) => {
+      setIsPlaying(event.isPlaying)
+    })
+    return () => sub.remove()
+  }, [player])
+
+  const handlePlay = useCallback(() => {
+    player.play()
+  }, [player])
 
   const handleDownloadVideo = useCallback(async () => {
     const normalizedUrl = url.trim()
@@ -119,14 +131,23 @@ function HighlightVideoCard({ name, url, width }: { name: string; url: string; w
   return (
     <View style={[styles.videoRow, { width }]}>
       <Text style={styles.videoName}>{name}</Text>
-      <VideoView
-        player={player}
-        style={styles.videoPlayer}
-        nativeControls
-        allowsFullscreen
-        allowsPictureInPicture
-        contentFit="contain"
-      />
+      <View style={styles.videoWrapper}>
+        <VideoView
+          player={player}
+          style={styles.videoPlayer}
+          nativeControls
+          allowsFullscreen
+          allowsPictureInPicture
+          contentFit="contain"
+        />
+        {!isPlaying && (
+          <Pressable style={styles.videoPlayOverlay} onPress={handlePlay}>
+            <View style={styles.videoPlayBtn}>
+              <Text style={styles.videoPlayBtnIcon}>▶</Text>
+            </View>
+          </Pressable>
+        )}
+      </View>
       <Pressable style={styles.videoDownloadButton} onPress={() => void handleDownloadVideo()}>
         <Text style={styles.videoDownloadButtonText}>Descargar video</Text>
       </Pressable>
@@ -2439,12 +2460,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
-  videoPlayer: {
+  videoWrapper: {
+    position: 'relative',
     width: '100%',
     aspectRatio: 16 / 9,
     borderRadius: 10,
-    backgroundColor: '#020617',
     overflow: 'hidden',
+    backgroundColor: '#020617',
+  },
+  videoPlayer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#020617',
+  },
+  videoPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoPlayBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0,0,0,0.60)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoPlayBtnIcon: {
+    color: '#ffffff',
+    fontSize: 22,
+    marginLeft: 4,
   },
   videoDownloadButton: {
     marginTop: 10,
