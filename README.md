@@ -29,6 +29,12 @@ npm install
 EXPO_PUBLIC_API_URL=https://fl-liga-backend.onrender.com
 ```
 
+Opcional para habilitar el botón de descarga Android dentro de la app:
+
+```bash
+EXPO_PUBLIC_ANDROID_APK_URL=https://tu-dominio.com/android/fl-liga.apk
+```
+
 > Si no defines variable, usa fallback:
 > - Android emulador: `http://10.0.2.2:4000`
 > - iOS simulador: `http://localhost:4000`
@@ -90,3 +96,14 @@ npx eas build --platform ios --profile preview
 npx eas build --platform android --profile production
 npx eas build --platform ios --profile production
 ```
+
+## Carpeta para APK Android
+
+Se dejó preparada la carpeta local:
+
+- android-builds/
+
+Úsala para guardar temporalmente los archivos generados como:
+
+- fl-liga-preview.apk
+- fl-liga-production.apk

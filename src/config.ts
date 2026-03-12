@@ -21,3 +21,5 @@ const runtimeApiUrl = () => {
 }
 
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').trim() || runtimeApiUrl()
+export const ANDROID_APK_URL =
+  (process.env.EXPO_PUBLIC_ANDROID_APK_URL ?? '').trim() || 'https://fl-liga-backend.onrender.com/android/fl-liga-mobile-preview.apk'
