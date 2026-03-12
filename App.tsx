@@ -25,7 +25,6 @@ import type { LiveEvent, LiveMatch, PublicClientSummary, ScheduledMatch } from '
 const queryClient = new QueryClient()
 const defaultFLLogo = require('./assets/icon.png')
 const androidDownloadBadge = require('./assets/android-icon-foreground.png')
-const webLogoUri = 'https://fl-liga-frontend.vercel.app/logo.png'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -1195,7 +1194,7 @@ const MobileLiveApp = () => {
   const themedStatusBarStyle = isThemeLight ? 'dark' : 'light'
   const leagueBackgroundImageUrl = fixtureQuery.data?.league.backgroundImageUrl ?? selectedLeague?.backgroundImageUrl
   const leagueLogoUrl = fixtureQuery.data?.league.logoUrl ?? selectedLeague?.logoUrl
-  const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : { uri: webLogoUri }
+  const heroLogoSource = leagueLogoUrl ? { uri: leagueLogoUrl } : defaultFLLogo
 
   const handleAndroidDownload = useCallback(async () => {
     if (!ANDROID_APK_URL) {
@@ -1970,7 +1969,7 @@ const MobileLiveApp = () => {
         )}
 
         <View style={styles.footerBox}>
-          <Image source={{ uri: webLogoUri }} defaultSource={defaultFLLogo} style={styles.footerLogo} />
+          <Image source={defaultFLLogo} style={styles.footerLogo} />
           <View style={styles.footerBrandText}>
             <Text style={styles.footerBrandTitle}>Fernando Lara Soft</Text>
             <Text style={styles.footerCopy}>© {year} · +593 993385551 · fernando.lara.moran@gmail.com</Text>
