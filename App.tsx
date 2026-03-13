@@ -1,3 +1,34 @@
+// Devuelve round, homeTeamId y awayTeamId a partir de un matchId y round
+function parseMatchIdentity(matchId: string, fallbackRound?: number) {
+  // Formato manual: manual__{round}__{homeTeamId}__{awayTeamId}
+  if (matchId.startsWith('manual__')) {
+    const parts = matchId.split('__')
+    if (parts.length === 4) {
+      const round = Number(parts[1])
+      const homeTeamId = parts[2]
+      const awayTeamId = parts[3]
+      if (Number.isFinite(round) && homeTeamId && awayTeamId) {
+        return { round, homeTeamId, awayTeamId }
+      }
+    }
+  }
+  // Formato generado: "{round}-{index}-{homeUUID}-{awayUUID}" → 12 partes al dividir por '-'
+  const parts = matchId.split('-')
+  if (parts.length === 12) {
+    const parsedRound = Number(parts[0])
+    const homeTeamId = parts.slice(2, 7).join('-')
+    const awayTeamId = parts.slice(7, 12).join('-')
+    if (Number.isFinite(parsedRound) && homeTeamId.length === 36 && awayTeamId.length === 36) {
+      return { round: parsedRound, homeTeamId, awayTeamId }
+    }
+  }
+  if (fallbackRound && Number.isFinite(fallbackRound)) {
+    return null
+  }
+  return null
+}
+// ...existing code...
+// ...existing code...
 import { StatusBar } from 'expo-status-bar'
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -83,53 +114,32 @@ const createManualMatchId = (round: number, homeTeamId: string, awayTeamId: stri
 
 function HighlightVideoCard({ name, url, width }: { name: string; url: string; width: number }) {
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isBuffering, setIsBuffering] = useState(true)
   const player = useVideoPlayer(url, (instance) => {
     instance.loop = false
+    // autoplay no existe en VideoPlayer
   })
 
   useEffect(() => {
-    const sub = player.addListener('playingChange', (event) => {
+    const subPlay = player.addListener('playingChange', (event) => {
       setIsPlaying(event.isPlaying)
     })
-    return () => sub.remove()
+    // El evento correcto es 'buffering' (expo-video)
+    const subBuffer = (player.addListener as any)('bufferingChange', (event: any) => {
+      setIsBuffering(event.isBuffering)
+    })
+    return () => {
+      subPlay.remove()
+      subBuffer.remove()
+    }
   }, [player])
 
   const handlePlay = useCallback(() => {
     player.play()
   }, [player])
 
-  const handleDownloadVideo = useCallback(async () => {
-    const normalizedUrl = url.trim()
-    if (!normalizedUrl) {
-      Alert.alert('Sin enlace de video', 'Este highlight no tiene un enlace válido para descargar.')
-      return
-    }
-
-    const preferredUrl = normalizedUrl.includes('?')
-      ? `${normalizedUrl}&download=1`
-      : `${normalizedUrl}?download=1`
-
-    try {
-      const preferredSupported = await Linking.canOpenURL(preferredUrl)
-      if (preferredSupported) {
-        await Linking.openURL(preferredUrl)
-        return
-      }
-
-      const fallbackSupported = await Linking.canOpenURL(normalizedUrl)
-      if (!fallbackSupported) {
-        Alert.alert('No se pudo abrir el video', 'Verifica que el enlace del highlight esté publicado correctamente.')
-        return
-      }
-
-      await Linking.openURL(normalizedUrl)
-    } catch {
-      Alert.alert('Error al descargar', 'No fue posible abrir la descarga del video highlight.')
-    }
-  }, [url])
-
   return (
-    <View style={[styles.videoRow, { width }]}>
+    <View style={[styles.videoRow, { width, maxWidth: 600, alignSelf: 'center' }]}> {/* Responsive */}
       <Text style={styles.videoName}>{name}</Text>
       <View style={styles.videoWrapper}>
         <VideoView
@@ -140,7 +150,12 @@ function HighlightVideoCard({ name, url, width }: { name: string; url: string; w
           allowsPictureInPicture
           contentFit="contain"
         />
-        {!isPlaying && (
+        {isBuffering && (
+          <View style={styles.videoBufferOverlay}>
+            <ActivityIndicator size="large" color="#22d3ee" />
+          </View>
+        )}
+        {!isPlaying && !isBuffering && (
           <Pressable style={styles.videoPlayOverlay} onPress={handlePlay}>
             <View style={styles.videoPlayBtn}>
               <Text style={styles.videoPlayBtnIcon}>▶</Text>
@@ -148,55 +163,11 @@ function HighlightVideoCard({ name, url, width }: { name: string; url: string; w
           </Pressable>
         )}
       </View>
-      <Pressable style={styles.videoDownloadButton} onPress={() => void handleDownloadVideo()}>
-        <Text style={styles.videoDownloadButtonText}>Descargar video</Text>
-      </Pressable>
     </View>
   )
 }
-
-const parseMatchIdentity = (matchId: string, fallbackRound?: number) => {
-  if (matchId.startsWith('manual__')) {
-    const [prefix, rawRound, homeTeamId, awayTeamId] = matchId.split('__')
-    const parsedRound = Number(rawRound)
-    if (prefix === 'manual' && Number.isFinite(parsedRound) && homeTeamId && awayTeamId) {
-      return { round: parsedRound, homeTeamId, awayTeamId }
-    }
-  }
-
-  if (matchId.startsWith('manual-')) {
-    const parsed = matchId.replace('manual-', '')
-    const firstDash = parsed.indexOf('-')
-    if (firstDash > 0) {
-      const parsedRound = Number(parsed.slice(0, firstDash))
-      const ids = parsed.slice(firstDash + 1).split('-')
-      if (Number.isFinite(parsedRound) && ids.length >= 10) {
-        const homeTeamId = ids.slice(0, 5).join('-')
-        const awayTeamId = ids.slice(5).join('-')
-        if (homeTeamId && awayTeamId) {
-          return { round: parsedRound, homeTeamId, awayTeamId }
-        }
-      }
-    }
-  }
-
-  // Formato generado: "{round}-{index}-{homeUUID}-{awayUUID}" → 12 partes al dividir por '-'
-  const parts = matchId.split('-')
-  if (parts.length === 12) {
-    const parsedRound = Number(parts[0])
-    const homeTeamId = parts.slice(2, 7).join('-')
-    const awayTeamId = parts.slice(7, 12).join('-')
-    if (Number.isFinite(parsedRound) && homeTeamId.length === 36 && awayTeamId.length === 36) {
-      return { round: parsedRound, homeTeamId, awayTeamId }
-    }
-  }
-
-  if (fallbackRound && Number.isFinite(fallbackRound)) {
-    return null
-  }
-
-  return null
-}
+// ...existing code...
+// ...existing code...
 
 const buildRoundTeamsKey = (round: number, homeTeamId: string, awayTeamId: string) => `${round}:${homeTeamId}:${awayTeamId}`
 
@@ -1299,13 +1270,16 @@ const MobileLiveApp = () => {
             },
           ]}
         >
-          {leagueBackgroundImageUrl && <Image source={{ uri: leagueBackgroundImageUrl }} style={styles.heroBackgroundImage} />}
-          <View style={styles.heroTextBox}>
-            <Text style={[styles.heroOverline, { color: accentColor }]}>FL League · Mobile Live</Text>
-            <Text style={[styles.title, themedHeroTitleStyle]}>{leagueName}</Text>
-            <Text style={[styles.subtitle, themedHeroSubtitleStyle]}>{leagueSubtitle}</Text>
+          <View style={styles.heroLogoWrap}>
+            <Image source={heroLogoSource} style={styles.heroLogo} resizeMode="contain" />
           </View>
-          <Image source={heroLogoSource} defaultSource={defaultFLLogo} style={styles.heroLogo} />
+          <Text style={[styles.heroTitle, themedHeroTitleStyle]}>{leagueName}</Text>
+          <Text style={[styles.heroSubtitle, themedHeroSubtitleStyle]}>{leagueSubtitle}</Text>
+          {step !== 'company' && (
+            <Pressable style={[styles.backButton, themedBackButtonStyle]} onPress={handleBack}>
+              <Text style={[styles.backButtonText, { color: activeTextColor }]}>← Volver</Text>
+            </Pressable>
+          )}
         </View>
 
         {clientsQuery.isLoading && <ActivityIndicator color="#38bdf8" />}
@@ -2008,6 +1982,11 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  heroLogoWrap: { alignItems: 'center', marginBottom: 8 },
+  heroTitle: { fontSize: 22, fontWeight: 'bold', color: '#0f172a', marginBottom: 2 },
+  heroSubtitle: { fontSize: 14, color: '#334155', marginBottom: 2 },
+  highlightVideosCarousel: { flexGrow: 0 },
+  highlightVideosScrollContent: { alignItems: 'center', paddingHorizontal: 8 },
   safeArea: {
     flex: 1,
     backgroundColor: '#f8fafc',
@@ -2448,12 +2427,56 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: '#0f172a',
   },
-  highlightVideosCarousel: {
-    marginTop: 2,
+  videoBufferOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(34,211,238,0.08)',
+    zIndex: 2,
   },
-  highlightVideosScrollContent: {
-    gap: 12,
-    paddingRight: 6,
+  heroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 12,
+  },
+  heroLogoModern: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#e0e7ef',
+  },
+  heroHeaderTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroTitleModern: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  heroSubtitleModern: {
+    fontSize: 14,
+    color: '#334155',
+    marginBottom: 2,
+  },
+  heroSeasonModern: {
+    fontSize: 13,
+    color: '#38bdf8',
+    marginBottom: 2,
+  },
+  heroCategoryModern: {
+    fontSize: 13,
+    color: '#f59e42',
+    fontWeight: '600',
   },
   videoName: {
     color: '#f8fafc',
@@ -2769,9 +2792,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#fde68a',
-    backgroundColor: '#1e293b',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#1e293b',
   },
   roundAwardPhotoFallbackText: {
     color: '#fde68a',
